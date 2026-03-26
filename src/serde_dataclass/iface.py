@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import is_dataclass, asdict as dataclass_asdict
 from json import JSONEncoder, loads, dumps
 from pathlib import Path
-from typing import Optional, Self, TypeVar, Union
+from typing import Optional, TypeVar, Union
+import sys
 
 import tomlkit
 from dacite import Config, from_dict
@@ -11,6 +12,11 @@ from dacite import Config, from_dict
 from .core import _DataclassEnforcer, _write_dataclass_to_container, _normalize_for_dataclass
 
 T = TypeVar("T")
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    Self = TypeVar("Self", bound="_DataclassEnforcer")
 
 
 class JsonDataclass(_DataclassEnforcer):

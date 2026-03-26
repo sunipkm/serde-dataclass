@@ -244,80 +244,71 @@ def test_set():
     assert loaded.items == {"a", "b"}
 
 
-try:
-    import numpy as np
-    from astropy.units import Quantity
-    import astropy.units as astrounits
-    USENUMPY = True
-    from tomlkit import register_encoder, item, string
-    from tomlkit.exceptions import ConvertError
-    from tomlkit.items import Item
+import numpy as np
+from astropy.units import Quantity
+import astropy.units as astrounits
+from tomlkit import register_encoder, item, string
+from tomlkit.exceptions import ConvertError
+from tomlkit.items import Item
 
-    @register_encoder
-    def encode_quantity(value, /, _parent=None, _sort_keys=False):
-        if isinstance(value, Quantity):
-            return item(f'{value}')
-        elif isinstance(value, np.ndarray):
-            return item(value.tolist())
-        else:
-            raise ConvertError
+@register_encoder
+def encode_quantity(value, /, _parent=None, _sort_keys=False):
+    if isinstance(value, Quantity):
+        return item(f'{value}')
+    elif isinstance(value, np.ndarray):
+        return item(value.tolist())
+    else:
+        raise ConvertError
 
-    def test_ndarray():
-        if not USENUMPY:
-            pytest.skip("NumPy not available, skipping ndarray test")
-        else:
-            from dacite import Config
+def test_ndarray():
+    from dacite import Config
 
-            def type_hook_ndarray(value):
-                arr = np.array(value)
-                return arr
+    def type_hook_ndarray(value):
+        arr = np.array(value)
+        return arr
 
-            def type_hook_quantity(value):
-                q = Quantity(value)
-                return q
+    def type_hook_quantity(value):
+        q = Quantity(value)
+        return q
 
-            class NumpyEncoder(JSONEncoder):
-                def default(self, o: Any) -> Any:
-                    if isinstance(o, Quantity):
-                        return str(o)
-                    if isinstance(o, np.ndarray):
-                        return o.tolist()
-                    return super().default(o)
+    class NumpyEncoder(JSONEncoder):
+        def default(self, o: Any) -> Any:
+            if isinstance(o, Quantity):
+                return str(o)
+            if isinstance(o, np.ndarray):
+                return o.tolist()
+            return super().default(o)
 
-            de = Config(type_hooks={
-                np.ndarray: type_hook_ndarray,
-                Quantity: type_hook_quantity,
-            })
+    de = Config(type_hooks={
+        np.ndarray: type_hook_ndarray,
+        Quantity: type_hook_quantity,
+    })
 
-            @json_config(
-                ser=NumpyEncoder,
-                de=de,
-            )
-            @toml_config(de=de)
-            @dataclass
-            class NumpyConfig(JsonDataclass, TomlDataclass):
-                array: np.ndarray = field(default_factory=lambda: np.array(
-                    [[1, 2], [3, 4]]), metadata={"description": "A numpy array"})
-                length: Quantity['length'] = field(
-                    default_factory=lambda: 5 * astrounits.meter, metadata={"description": "A quantity with units"})
+    @json_config(
+        ser=NumpyEncoder,
+        de=de,
+    )
+    @toml_config(de=de)
+    @dataclass
+    class NumpyConfig(JsonDataclass, TomlDataclass):
+        array: np.ndarray = field(default_factory=lambda: np.array(
+            [[1, 2], [3, 4]]), metadata={"description": "A numpy array"})
+        length: Quantity['length'] = field(
+            default_factory=lambda: 5 * astrounits.meter, metadata={"description": "A quantity with units"})
 
-            cfg = NumpyConfig()
-            text = cfg.to_toml()
+    cfg = NumpyConfig()
+    text = cfg.to_toml()
 
-            assert 'array = [[1, 2], [3, 4]] # A numpy array' in text
+    assert 'array = [[1, 2], [3, 4]] # A numpy array' in text
 
-            loaded = NumpyConfig.from_toml(text)
-            assert np.array_equal(loaded.array, np.array([[1, 2], [3, 4]]))
-            assert loaded.length == 5 * astrounits.meter
+    loaded = NumpyConfig.from_toml(text)
+    assert np.array_equal(loaded.array, np.array([[1, 2], [3, 4]]))
+    assert loaded.length == 5 * astrounits.meter
 
-            json_text = cfg.to_json()
-            json_loaded = NumpyConfig.from_json(json_text)
-            assert np.array_equal(json_loaded.array, loaded.array)
-            assert json_loaded.length == loaded.length
-
-
-except ImportError:
-    USENUMPY = False
+    json_text = cfg.to_json()
+    json_loaded = NumpyConfig.from_json(json_text)
+    assert np.array_equal(json_loaded.array, loaded.array)
+    assert json_loaded.length == loaded.length
 
 
 def test_tomldataclass():
