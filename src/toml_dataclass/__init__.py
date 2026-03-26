@@ -21,11 +21,11 @@ class AppConfig:
     \"\"\"Application configuration\"\"\"  # This docstring will be used as the root comment
     app_name: str = field(
         default="demo",
-        metadata={"comment": "Application name", "toml": "app-name"},
+        metadata={"description": "Application name", "toml": "app-name"},
     )
     log_level: str = field(
         default="info",
-        metadata={"comment": "Log level", "toml": "log-level"},
+        metadata={"description": "Log level", "toml": "log-level"},
     )
 # Create an instance
 config = AppConfig()
@@ -41,11 +41,12 @@ A `@dataclass_json` decorator is also provided for JSON serialization and deseri
 """
 from importlib.metadata import version
 
-from .core import dataclass_toml, dataclass_json
+from .core import dataclass_toml, dataclass_json, JsonCompatible, TomlCompatible
 
 __version__ = version(__package__ or "toml_dataclass")
 
 __all__ = [
     "dataclass_toml", "dataclass_json",
+    "JsonCompatible", "TomlCompatible",
     "__version__"
 ]

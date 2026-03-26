@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from json import JSONEncoder
-from typing import Any, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 import pytest
 
 from toml_dataclass import dataclass_toml, dataclass_json
+from toml_dataclass import JsonCompatible, TomlCompatible
 
 
 class Mode(str, Enum):
@@ -17,14 +18,14 @@ class Mode(str, Enum):
 
 @dataclass
 class Credentials:
-    username: str = field(metadata={"comment": "User name"})
-    password: str = field(metadata={"comment": "Password"})
+    username: str = field(metadata={"description": "User name"})
+    password: str = field(metadata={"description": "Password"})
 
 
 @dataclass
 class Server:
-    host: str = field(metadata={"comment": "Host name"})
-    port: int = field(default=8080, metadata={"comment": "Port number"})
+    host: str = field(metadata={"description": "Host name"})
+    port: int = field(default=8080, metadata={"description": "Port number"})
 
 
 @dataclass_toml
@@ -32,11 +33,14 @@ class Server:
 class EmptyConfig:
     """An empty configuration
     """
-    slits: dict[str, str] = field(
-        default_factory=dict(
-            {'4861': 'slit'}), metadata={"comment": "Slits dict"})
-    name_with_underscore: str = field(default="default", metadata={
-                                      "comment": "Name with underscore"})
+    slits: Dict[str, str] = field(
+        default_factory=lambda: {'4861': 'slit'},
+        metadata={"description": "Slits dict"}
+    )
+    name_with_underscore: str = field(
+        default="default",
+        metadata={"description": "Name with underscore"}
+    )
 
     @classmethod
     def default(cls) -> EmptyConfig:
@@ -45,41 +49,44 @@ class EmptyConfig:
 
 @dataclass_toml(root_comment="App configuration")
 @dataclass
-class AppConfig:
+class AppConfig(TomlCompatible):
     app_name: str = field(
         default="demo",
-        metadata={"comment": "Application name", "toml": "app-name"},
+        metadata={"description": "Application name", "toml": "app-name"},
     )
     log_level: Literal["debug", "info", "warning", "error"] = field(
         default="info",
-        metadata={"comment": "Logging level", "toml": "log-level"},
+        metadata={"description": "Logging level", "toml": "log-level"},
     )
-    mode: Mode = field(default=Mode.DEV, metadata={"comment": "Run mode"})
-    debug: bool = field(default=False, metadata={"comment": "Enable debug"})
+    mode: Mode = field(default=Mode.DEV, metadata={"description": "Run mode"})
+    debug: bool = field(default=False, metadata={
+                        "description": "Enable debug"})
     thresholds: tuple[int, int, int] = field(
         default=(1, 2, 3),
-        metadata={"comment": "Threshold tuple"},
+        metadata={"description": "Threshold tuple"},
     )
     tags: list[str] = field(default_factory=lambda: [
-                            "a", "b"], metadata={"comment": "Tag list"})
+                            "a", "b"], metadata={"description": "Tag list"})
     settings: dict[str, str] = field(
         default_factory=lambda: {"theme": "dark", "region": "us-east"},
-        metadata={"comment": "Settings dict"},
+        metadata={"description": "Settings dict"},
     )
     creds: Credentials = field(
         default_factory=lambda: Credentials(
             username="admin", password="secret"),
-        metadata={"comment": "Credentials"},
+        metadata={"description": "Credentials"},
     )
     servers: list[Server] = field(
         default_factory=lambda: [
             Server("localhost", 8080), Server("backup", 8081)],
-        metadata={"comment": "Server list"},
+        metadata={"description": "Server list"},
     )
     note: Optional[str] = field(default=None, metadata={
-                                "comment": "Optional note"})
-    empty: EmptyConfig = field(default_factory=EmptyConfig.default, metadata={
-                               "comment": "Empty config"})
+                                "description": "Optional note"})
+    empty: EmptyConfig = field(
+        default_factory=EmptyConfig.default,
+        metadata={"description": "Empty config"}
+    )
 
 
 def test_to_toml_contains_root_comment_and_comments():
@@ -201,7 +208,7 @@ def test_none_field_is_omitted():
 
 def test_dict_with_non_string_keys_fails():
     @dataclass
-    class BadConfig:
+    class BadConfig(TomlCompatible):
         data: dict[int, str]
 
     BadConfig = dataclass_toml()(BadConfig)
@@ -228,9 +235,9 @@ def test_nested_list_of_dataclasses_round_trip():
 def test_set():
     @dataclass_toml
     @dataclass
-    class SetConfig:
+    class SetConfig(TomlCompatible):
         items: set[str] = field(default_factory=lambda: {"a", "b"}, metadata={
-                                "comment": "A set of items"})
+                                "description": "A set of items"})
     cfg = SetConfig()
     text = cfg.to_toml()
 
@@ -253,12 +260,7 @@ try:
     def encode_quantity(value, /, _parent=None, _sort_keys=False):
         if isinstance(value, Quantity):
             return item(f'{value}')
-        else:
-            raise ConvertError
-
-    @register_encoder
-    def encode_ndarray(value, /, _parent=None, _sort_keys=False) -> Item:
-        if isinstance(value, np.ndarray):
+        elif isinstance(value, np.ndarray):
             return item(value.tolist())
         else:
             raise ConvertError
@@ -283,18 +285,18 @@ try:
                     type_hooks={np.ndarray: type_hook_ndarray, Quantity: type_hook_quantity})
             )
             @dataclass
-            class NumpyConfig:
+            class NumpyConfig(JsonCompatible, TomlCompatible):
                 array: np.ndarray = field(default_factory=lambda: np.array(
-                    [[1, 2], [3, 4]]), metadata={"comment": "A numpy array"})
+                    [[1, 2], [3, 4]]), metadata={"description": "A numpy array"})
                 length: Quantity['length'] = field(
-                    default_factory=lambda: 5 * astrounits.meter, metadata={"comment": "A quantity with units"})
+                    default_factory=lambda: 5 * astrounits.meter, metadata={"description": "A quantity with units"})
 
             cfg = NumpyConfig()
-            text = cfg.to_toml() # type: ignore
+            text = cfg.to_toml()
 
             assert 'array = [[1, 2], [3, 4]] # A numpy array' in text
 
-            loaded = NumpyConfig.from_toml(text) # type: ignore
+            loaded = NumpyConfig.from_toml(text)
             assert np.array_equal(loaded.array, np.array([[1, 2], [3, 4]]))
             assert loaded.length == 5 * astrounits.meter
 
@@ -323,12 +325,12 @@ def test_tomldataclass():
         """A config with a custom root comment and metadata keys"""
         value: int = field(
             default=42, metadata={
-                "comment": "The answer", "toml": "the-value"
+                "description": "The answer", "toml": "the-value"
             }
         )
 
     cfg = MyConfig()
-    text = cfg.to_toml() # type: ignore
+    text = cfg.to_toml()  # type: ignore
     output = """# A config with a custom root comment and metadata keys
 
 the-value = 42 # The answer

@@ -13,6 +13,80 @@ from dacite import Config, from_dict
 T = TypeVar("T")
 
 
+class JsonCompatible:
+    """Subclass derivations get type annotations when
+    decorated with @dataclass_json.
+    """
+    def to_json(self, **kwargs) -> str:
+        """Convert this class to a JSON string.
+
+        Arguments:
+            **kwargs: Passed through to `json.dumps()`
+
+        Returns:
+            str: JSON string representation of this object.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def from_json(cls, text: str, **kwargs) -> Self:
+        """Create an instance of this class from a JSON string.
+
+        Arguments:
+            text: The JSON string to parse.
+            **kwargs: Passed through to `json.loads()`. May also include `config` for dacite Config.
+
+        Returns:
+            An instance of this class.
+        """
+        raise NotImplementedError
+
+
+class TomlCompatible:
+    """Subclass derivations get type annotation
+    when decorated with @dataclass_toml.
+    """
+    def to_toml(self) -> str:
+        """Convert this class to a TOML string.
+
+        Returns:
+            str: TOML string representation of this object.
+        """
+        raise NotImplementedError
+
+    def save_toml(self, path: Union[str, Path]) -> None:
+        """Save this class as a TOML file.
+
+        Arguments:
+            path: The file path to save to.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def from_toml(cls, text: str) -> Self:
+        """Create an instance of this class from a TOML string.
+
+        Arguments:
+            text: The TOML string to parse.
+
+        Returns:
+            An instance of this class.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def load_toml(cls, path: Union[str, Path]) -> Self:
+        """Create an instance of this class from a TOML file.
+
+        Arguments:
+            path: The file path to load from.
+
+        Returns:
+            An instance of this class.
+        """
+        raise NotImplementedError
+
+
 def dataclass_json(
     cls=None
 ):
@@ -54,7 +128,7 @@ def dataclass_toml(
     cls=None,
     *,
     root_comment: Optional[str] = None,
-    metadata_key: str = "comment",
+    metadata_key: str = "description",
     rename_key: str = "toml",
     config: Optional[Config] = None,
 ):
@@ -63,7 +137,7 @@ def dataclass_toml(
 
     Arguments:
     - root_comment: Optional comment to add at the top of the TOML document. Can also be set via the class docstring or __toml_comment__ attribute.
-    - metadata_key: The key in field metadata to look for comments (default "comment")
+    - metadata_key: The key in field metadata to look for comments (default "description")
     - rename_key: The key in field metadata to look for TOML key renaming (default "toml")
     - config: Optional dacite Config to use for loading.
 
@@ -74,7 +148,7 @@ def dataclass_toml(
     - `load_toml(path)` classmethod to load from a file
 
     Field comments:
-        field(metadata={"comment": "..."})
+        field(metadata={"description": "..."})
 
     Field key renaming:
         field(metadata={"toml": "log-level"})

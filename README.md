@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
-from toml_dataclass import dataclass_toml
+from toml_dataclass import dataclass_toml, TomlCompatible
 
 
 class Mode(str, Enum):
@@ -34,26 +34,26 @@ class Mode(str, Enum):
 
 @dataclass
 class Database:
-    host: str = field(metadata={"comment": "Database host"})
-    port: int = field(default=5432, metadata={"comment": "Database port"})
+    host: str = field(metadata={"description": "Database host"})
+    port: int = field(default=5432, metadata={"description": "Database port"})
 
 
 @dataclass_toml
 @dataclass
-class AppConfig:
+class AppConfig(TomlCompatible): # This subclass-derivation is optional, provides type annotations
     """Application configuration"""  # This docstring will be used as the root comment
     app_name: str = field(
         default="demo",
-        metadata={"comment": "Application name", "toml": "app-name"},
+        metadata={"description": "Application name", "toml": "app-name"},
     )
     log_level: Literal["debug", "info", "warning", "error"] = field(
         default="info",
-        metadata={"comment": "Logging verbosity", "toml": "log-level"},
+        metadata={"description": "Logging verbosity", "toml": "log-level"},
     )
-    mode: Mode = field(default=Mode.DEV, metadata={"comment": "Runtime mode"})
+    mode: Mode = field(default=Mode.DEV, metadata={"description": "Runtime mode"})
     database: Database = field(
         default_factory=lambda: Database(host="localhost"),
-        metadata={"comment": "Database settings"},
+        metadata={"description": "Database settings"},
     )
 
 cfg = AppConfig()
