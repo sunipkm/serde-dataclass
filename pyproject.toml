@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toml-dataclass"
+version = "0.0.1"
+description = "Convert dataclasses to TOML, preserving comments."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "dacite>=1.8",
+  "tomlkit>=0.12",
+]
+authors = [
+  { name = "Sunip K. Mukherjee <sunipkmukherjee@gmail.com>" }
+]
+license = { text = "MIT" }
+keywords = ["toml", "dataclass", "dacite", "tomlkit", "config"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

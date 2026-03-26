@@ -1,0 +1,13 @@
+**/.vscode
+**/__pycache__
+**/.mypy_cache
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+**/dist
+**/build
+**/*egg-info
+**/.eggs
+**/.DS_Store
+**/._*
+**/Thumbs.db
