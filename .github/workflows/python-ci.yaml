@@ -27,6 +27,7 @@ jobs:
                   pip install pytest
                   pip install phmdoctest
                   phmdoctest README.md --outfile tests/test_readme.py
+                  pip install astropy # For pytest
                   # Install your package (editable mode)
                   pip install -e .
 
