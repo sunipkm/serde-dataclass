@@ -11,3 +11,4 @@
 **/.DS_Store
 **/._*
 **/Thumbs.db
+tests/test_readme.py

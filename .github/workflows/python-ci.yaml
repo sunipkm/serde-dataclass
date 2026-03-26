@@ -1,0 +1,35 @@
+name: Python CI
+
+on:
+    push:
+        branches: ["master"]
+    pull_request:
+        branches: ["master"]
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Python ${{ matrix.python-version }}
+              uses: actions/setup-python@v5
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  cache: "pip" # Caches dependencies for faster subsequent runs
+
+            - name: Install dependencies
+              run: |
+                  python -m pip install --upgrade pip
+
+            - name: Run tests
+              run: |
+                  pip install pytest # Install pytest for running tests
+                  pip install phmdoctest # Install phmdoctest for testing docstrings
+                  phmdoctest README.md --outfile test_readme.py # Generate test file from README.md
+                  pytest # Run tests

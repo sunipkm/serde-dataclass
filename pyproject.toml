@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "toml-dataclass"
+name = "serde-dataclass"
 version = "0.0.1"
 description = "Convert dataclasses to TOML, preserving comments."
 readme = "README.md"
@@ -14,7 +14,7 @@ dependencies = [
 ]
 authors = [{ name = "Sunip K. Mukherjee <sunipkmukherjee@gmail.com>" }]
 license = { text = "MIT" }
-keywords = ["toml", "dataclass", "dacite", "tomlkit", "config"]
+keywords = ["serde", "dataclass", "toml", "json"]
 
 [project.optional-dependencies]
 dev = [

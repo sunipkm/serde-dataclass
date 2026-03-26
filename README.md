@@ -1,6 +1,6 @@
-# toml-dataclass
+# serde-dataclass
 
-Helpers for serializing dataclasses to TOML with:
+Helpers for serializing dataclasses to TOML (and JSON) with:
 
 - Inline comments for scalar values
 - Non-inline comments for tables and arrays of tables
@@ -14,7 +14,7 @@ Helpers for serializing dataclasses to TOML with:
 ## Install
 
 ```bash
-pip install toml-dataclass
+pip install serde-dataclass
 ```
 
 ## Example
@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
-from toml_dataclass import dataclass_toml, TomlCompatible
+from serde_dataclass import TomlDataclass
 
 
 class Mode(str, Enum):
@@ -37,10 +37,8 @@ class Database:
     host: str = field(metadata={"description": "Database host"})
     port: int = field(default=5432, metadata={"description": "Database port"})
 
-
-@dataclass_toml
 @dataclass
-class AppConfig(TomlCompatible): # This subclass-derivation is optional, provides type annotations
+class AppConfig(TomlDataclass): # This subclass-derivation is optional, provides type annotations
     """Application configuration"""  # This docstring will be used as the root comment
     app_name: str = field(
         default="demo",
@@ -59,6 +57,7 @@ class AppConfig(TomlCompatible): # This subclass-derivation is optional, provide
 cfg = AppConfig()
 text = cfg.to_toml()
 loaded = AppConfig.from_toml(text)
+
 ```
 
 Example output:
@@ -84,7 +83,7 @@ The following example handles `numpy` arrays and
 is provided [here](examples/custom_types.py).
 
 #### Custom serializer/deserializer
-
+<!--phmdoctest-skip-->
 ```python
 # %% Encoders and decoders for custom types
 # Register tomlkit encoder
@@ -131,20 +130,20 @@ class CustomEncoder(JSONEncoder):
 ```
 
 #### Custom Dataclass
-
+<!--phmdoctest-skip-->
 ```python
 # %% Custom class definition
 @dataclass
-class Nesting:  # Note: The nested dataclass does not need to be
-    # decorated with dataclass_json or dataclass_toml
+class Nesting:  # Note: The nested dataclass does not need to
+    # derive from TomlDataclass or JsonDataclass
     """A simple nested dataclass to demonstrate nested structures."""
     value: int = field(metadata={'description': 'An integer value'})
 
 
-@dataclass_json(ser=CustomEncoder, de=Config(type_hooks=CustomHooks().dacite_hooks))
-@dataclass_toml(de=Config(type_hooks=CustomHooks().dacite_hooks))
+@json_config(ser=CustomEncoder, de=Config(type_hooks=CustomHooks().dacite_hooks))
+@toml_config(de=Config(type_hooks=CustomHooks().dacite_hooks))
 @dataclass
-class NpTest(TomlCompatible, JsonCompatible):
+class NpTest(TomlDataclass, JsonDataclass):
     """Test class with a numpy array and an astropy Quantity."""
     arr: np.ndarray = field(metadata={'description': 'A numpy array'})
     qty: Quantity['dimensionless'] = field(
@@ -159,7 +158,7 @@ class NpTest(TomlCompatible, JsonCompatible):
 ```
 
 #### Usage
-
+<!--phmdoctest-skip-->
 ```python
 # %% Test the class
 

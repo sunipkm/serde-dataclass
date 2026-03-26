@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Any, Callable, Dict, Type
 from dacite import Config
-from toml_dataclass import dataclass_toml, TomlCompatible, dataclass_json, JsonCompatible
+from serde_dataclass import JsonDataclass, TomlDataclass, json_config, toml_config
 from dataclasses import dataclass, field
 from json import JSONEncoder
 from astropy import units as u
@@ -47,6 +47,10 @@ class CustomHooks:
             Quantity: self.dacite_quantity_hook,
             np.ndarray: self.dacite_ndarray_hook,
         }
+    
+    @property
+    def dacite_conf(self) -> Config:
+        return Config(type_hooks=self.dacite_hooks)
 
 
 class CustomEncoder(JSONEncoder):
@@ -69,10 +73,11 @@ class Nesting:  # Note: The nested dataclass does not need to be
     value: int = field(metadata={'description': 'An integer value'})
 
 
-@dataclass_json(ser=CustomEncoder, de=Config(type_hooks=CustomHooks().dacite_hooks))
-@dataclass_toml(de=Config(type_hooks=CustomHooks().dacite_hooks))
+
 @dataclass
-class NpTest(TomlCompatible, JsonCompatible):
+@json_config(ser=CustomEncoder, de=CustomHooks().dacite_conf)
+@toml_config(de=CustomHooks().dacite_conf)
+class NpTest(JsonDataclass, TomlDataclass):
     """Test class with a numpy array and an astropy Quantity."""
     arr: np.ndarray = field(metadata={'description': 'A numpy array'})
     qty: Quantity['dimensionless'] = field(

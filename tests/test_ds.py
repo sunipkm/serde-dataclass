@@ -7,8 +7,7 @@ from typing import Any, Dict, Literal, Optional
 
 import pytest
 
-from toml_dataclass import dataclass_toml, dataclass_json
-from toml_dataclass import JsonCompatible, TomlCompatible
+from serde_dataclass import JsonDataclass, TomlDataclass, json_config, toml_config
 
 
 class Mode(str, Enum):
@@ -28,9 +27,8 @@ class Server:
     port: int = field(default=8080, metadata={"description": "Port number"})
 
 
-@dataclass_toml
 @dataclass
-class EmptyConfig:
+class EmptyConfig(TomlDataclass):
     """An empty configuration
     """
     slits: Dict[str, str] = field(
@@ -47,9 +45,9 @@ class EmptyConfig:
         return cls(dict({'4861': 'slit'}), name_with_underscore="default")
 
 
-@dataclass_toml(root_comment="App configuration")
 @dataclass
-class AppConfig(TomlCompatible):
+class AppConfig(TomlDataclass):
+    """App configuration"""
     app_name: str = field(
         default="demo",
         metadata={"description": "Application name", "toml": "app-name"},
@@ -208,10 +206,10 @@ def test_none_field_is_omitted():
 
 def test_dict_with_non_string_keys_fails():
     @dataclass
-    class BadConfig(TomlCompatible):
+    class BadConfig(TomlDataclass):
         data: dict[int, str]
 
-    BadConfig = dataclass_toml()(BadConfig)
+    # BadConfig = dataclass_toml()(BadConfig)
     cfg = BadConfig(data={1: "x"})
 
     with pytest.raises(TypeError, match="string keys"):
@@ -233,9 +231,8 @@ def test_nested_list_of_dataclasses_round_trip():
 
 
 def test_set():
-    @dataclass_toml
     @dataclass
-    class SetConfig(TomlCompatible):
+    class SetConfig(TomlDataclass):
         items: set[str] = field(default_factory=lambda: {"a", "b"}, metadata={
                                 "description": "A set of items"})
     cfg = SetConfig()
@@ -279,13 +276,26 @@ try:
                 q = Quantity(value)
                 return q
 
-            @dataclass_json
-            @dataclass_toml(
-                de=Config(
-                    type_hooks={np.ndarray: type_hook_ndarray, Quantity: type_hook_quantity})
+            class NumpyEncoder(JSONEncoder):
+                def default(self, o: Any) -> Any:
+                    if isinstance(o, Quantity):
+                        return str(o)
+                    if isinstance(o, np.ndarray):
+                        return o.tolist()
+                    return super().default(o)
+
+            de = Config(type_hooks={
+                np.ndarray: type_hook_ndarray,
+                Quantity: type_hook_quantity,
+            })
+
+            @json_config(
+                ser=NumpyEncoder,
+                de=de,
             )
+            @toml_config(de=de)
             @dataclass
-            class NumpyConfig(JsonCompatible, TomlCompatible):
+            class NumpyConfig(JsonDataclass, TomlDataclass):
                 array: np.ndarray = field(default_factory=lambda: np.array(
                     [[1, 2], [3, 4]]), metadata={"description": "A numpy array"})
                 length: Quantity['length'] = field(
@@ -300,16 +310,8 @@ try:
             assert np.array_equal(loaded.array, np.array([[1, 2], [3, 4]]))
             assert loaded.length == 5 * astrounits.meter
 
-            class NumpyEncoder(JSONEncoder):
-                def default(self, o: Any) -> Any:
-                    if isinstance(o, Quantity):
-                        return str(o)
-                    if isinstance(o, np.ndarray):
-                        return o.tolist()
-                    return super().default(o)
-            json_text = cfg.to_json(cls=NumpyEncoder)
-            json_loaded = NumpyConfig.from_json(json_text, config=Config(
-                type_hooks={np.ndarray: type_hook_ndarray, Quantity: type_hook_quantity}))
+            json_text = cfg.to_json()
+            json_loaded = NumpyConfig.from_json(json_text)
             assert np.array_equal(json_loaded.array, loaded.array)
             assert json_loaded.length == loaded.length
 
@@ -319,9 +321,8 @@ except ImportError:
 
 
 def test_tomldataclass():
-    @dataclass_toml
     @dataclass
-    class MyConfig:
+    class MyConfig(TomlDataclass):
         """A config with a custom root comment and metadata keys"""
         value: int = field(
             default=42, metadata={

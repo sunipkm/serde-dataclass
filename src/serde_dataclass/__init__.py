@@ -3,7 +3,11 @@
 TOML Dataclass
 -----------------
 
-TOML Dataclass provides a decorator `@dataclass_toml` that extends Python's built-in `dataclass` to support serialization and deserialization to and from TOML format, with additional features such as:
+TOML Dataclass provides base classes TomlDataclass and JsonDataclass for easy 
+serialization and deserialization of dataclasses to and from TOML and JSON 
+formats, respectively.
+
+It supports features such as:
 - Support for comments on fields and the root document
 - Custom key names for TOML fields
 - Nested dataclasses
@@ -41,12 +45,12 @@ A `@dataclass_json` decorator is also provided for JSON serialization and deseri
 """
 from importlib.metadata import version
 
-from .core import dataclass_toml, dataclass_json, JsonCompatible, TomlCompatible
+from .iface import JsonDataclass, TomlDataclass, json_config, toml_config
 
 __version__ = version(__package__ or "toml_dataclass")
 
 __all__ = [
-    "dataclass_toml", "dataclass_json",
-    "JsonCompatible", "TomlCompatible",
+    "JsonDataclass", "TomlDataclass",
+    "json_config", "toml_config",
     "__version__"
 ]

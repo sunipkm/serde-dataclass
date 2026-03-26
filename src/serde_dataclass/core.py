@@ -1,264 +1,30 @@
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass, asdict as dataclass_asdict
+from dataclasses import fields, is_dataclass
 from enum import Enum
-from json import JSONEncoder, loads, dumps
-from pathlib import Path
-from typing import Any, Literal, Optional, Self, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import Any, Literal, Optional, TypeVar, Union, get_args, get_origin, get_type_hints
 
 import tomlkit
-from dacite import Config, from_dict
 
 T = TypeVar("T")
 
 
-class JsonCompatible:
-    """Subclass derivations get type annotations when
-    decorated with @dataclass_json.
+class _DataclassEnforcer:
+    """
+    Base class that enforces subclasses are decorated with @dataclass
+    before they can be instantiated.
     """
 
-    def to_json(self, **kwargs) -> str:
-        """Convert this class to a JSON string.
+    def __new__(cls, *args, **kwargs):
+        if cls is _DataclassEnforcer:
+            return super().__new__(cls)
 
-        Arguments:
-            **kwargs: Passed through to `json.dumps()`. Note: if a custom JSONEncoder is set via the dataclass_json(ser=...) decorator argument, you cannot also specify a 'cls' argument here.
-
-        Returns:
-            str: JSON string representation of this object.
-        """
-        raise NotImplementedError
-
-    @classmethod
-    def from_json(cls, text: str, **kwargs) -> Self:
-        """Create an instance of this class from a JSON string.
-
-        Arguments:
-            text: The JSON string to parse.
-            kwargs: Passed through to `json.loads()`.
-
-        Returns:
-            An instance of this class.
-        """
-        raise NotImplementedError
-
-
-class TomlCompatible:
-    """Subclass derivations get type annotation
-    when decorated with @dataclass_toml.
-    """
-
-    def to_toml(self) -> str:
-        """Convert this class to a TOML string.
-
-        Returns:
-            str: TOML string representation of this object.
-        """
-        raise NotImplementedError
-
-    def save_toml(self, path: Union[str, Path]) -> None:
-        """Save this class as a TOML file.
-
-        Arguments:
-            path: The file path to save to.
-        """
-        raise NotImplementedError
-
-    @classmethod
-    def from_toml(cls, text: str) -> Self:
-        """Create an instance of this class from a TOML string.
-
-        Arguments:
-            text: The TOML string to parse.
-
-        Returns:
-            An instance of this class.
-        """
-        raise NotImplementedError
-
-    @classmethod
-    def load_toml(cls, path: Union[str, Path]) -> Self:
-        """Create an instance of this class from a TOML file.
-
-        Arguments:
-            path: The file path to load from.
-
-        Returns:
-            An instance of this class.
-        """
-        raise NotImplementedError
-
-
-def dataclass_json(
-    cls=None,
-    /,
-    ser: Optional[type[JSONEncoder]] = None,
-    de: Optional[Config] = None,
-):
-    """
-    Decorate a dataclass to add JSON serialization/deserialization helpers.
-    
-    Note: Nested dataclasses are supported without the need for additional decorators.
-    However, these nested dataclasses will not have their own to_json/from_json methods
-    unless they are also decorated.
-
-    Arguments:
-    - ser: Optional JSONEncoder subclass to use for to_json serialization.
-    - de: Optional dacite Config to use for from_json deserialization.
-
-    Features:
-    - `to_json(**kwargs)` method to serialize to JSON string (accepts same kwargs as `json.dumps()`)
-    - `from_json(text, config)` classmethod to deserialize from JSON string (accepts same kwargs as `json.loads()`, plus optional `config` for dacite Config)
-    """
-    def decorator(cls: type[T]) -> type[T]:
         if not is_dataclass(cls):
-            raise TypeError("@dataclass_json must be applied after @dataclass")
-
-        def to_json(self, **kwargs) -> str:
-            if ser is not None \
-                    and kwargs.get("cls") is not None:
-                raise ValueError(
-                    "Cannot specify both a custom JSONEncoder and a 'cls' argument to to_json()"
-                )
-            if ser is not None and not issubclass(ser, JSONEncoder):
-                raise TypeError(
-                    "ser argument to dataclass_json must be a subclass of json.JSONEncoder"
-                )
-
-            kwargs["cls"] = ser
-            return dumps(dataclass_asdict(self), **kwargs)
-
-        def from_json(_cls, text: str, **kwargs) -> T:
-            data = loads(text, **kwargs)
-            return from_dict(cls, data, de)
-
-        to_json.__isabstractmethod__ = False  # type: ignore
-        cls.to_json = to_json  # type: ignore
-        # if issubclass(cls, JsonCompatible):
-        #     install_classmethod(cls, "from_json", from_json)
-        # else:
-        cls.from_json = classmethod(from_json)  # type: ignore
-        # cls.from_json = from_json
-        return cls
-
-    if cls is None:
-        return decorator
-    else:
-        return decorator(cls)
-
-
-def dataclass_toml(
-    cls=None,
-    *,
-    root_comment: Optional[str] = None,
-    metadata_key: str = "description",
-    rename_key: str = "toml",
-    de: Optional[Config] = None,
-):
-    """
-    Decorate a dataclass to add TOML load/save helpers.
-
-    Note: Nested dataclasses are supported without the need for additional decorators.
-    However, these nested dataclasses will not have their own to_toml/from_toml methods
-    unless they are also decorated.
-
-    Arguments:
-    - root_comment: Optional comment to add at the top of the TOML document. Can also be set via the class docstring or __toml_comment__ attribute.
-    - metadata_key: The key in field metadata to look for comments (default "description")
-    - rename_key: The key in field metadata to look for TOML key renaming (default "toml")
-    - de: Optional dacite Config to use for loading.
-
-    Features:
-    - `to_toml()` method to serialize to TOML string
-    - `from_toml()` classmethod to deserialize from TOML string
-    - `save_toml(path)` method to save to a file
-    - `load_toml(path)` classmethod to load from a file
-
-    Field comments:
-        field(metadata={"description": "..."})
-
-    Field key renaming:
-        field(metadata={"toml": "log-level"})
-
-    Root comment resolution order:
-        1. root_comment=...
-        2. cls.__toml_comment__
-        3. class docstring
-    """
-
-    def decorator(cls: type[T]) -> type[T]:
-        if not is_dataclass(cls):
-            raise TypeError("@dataclass_toml must be applied after @dataclass")
-
-        resolved_root_comment = (
-            root_comment
-            or getattr(cls, "__toml_comment__", None)
-            or (cls.__doc__.strip() if cls.__doc__ else None)
-        )
-
-        cfg = de or Config(
-            cast=[tuple],
-            check_types=True,
-        )
-
-        setattr(cls, "__toml_root_comment__", resolved_root_comment)
-        setattr(cls, "__toml_metadata_key__", metadata_key)
-        setattr(cls, "__toml_rename_key__", rename_key)
-        setattr(cls, "__toml_dacite_config__", cfg)
-
-        def to_toml(self) -> str:
-            doc = tomlkit.document()
-
-            if resolved_root_comment:
-                for line in resolved_root_comment.splitlines():
-                    doc.add(tomlkit.comment(line))
-                doc.add(tomlkit.nl())
-
-            _write_dataclass_to_container(
-                container=doc,
-                obj=self,
-                cls=type(self),
-                metadata_key=metadata_key,
-                rename_key=rename_key,
-            )
-            return doc.as_string()
-
-        def from_toml(cls, text: str) -> T:
-            parsed = tomlkit.parse(text)
-            raw = parsed.unwrap()
-            normalized = _normalize_for_dataclass(
-                value=raw,
-                cls=cls,  # type: ignore
-                rename_key=rename_key,
-            )
-            return from_dict(
-                data_class=cls,  # type: ignore
-                data=normalized,
-                config=getattr(cls, "__toml_dacite_config__"),
+            raise TypeError(
+                f"{cls.__name__} must be decorated with @dataclass"
             )
 
-        def save_toml(self, path: Union[str, Path]) -> None:
-            Path(path).write_text(self.to_toml(), encoding="utf-8")
-
-        def load_toml(cls, path: Union[str, Path]) -> T:
-            return cls.from_toml(Path(path).read_text(encoding="utf-8"))
-
-        to_toml.__isabstractmethod__ = False  # type: ignore
-        save_toml.__isabstractmethod__ = False  # type: ignore
-        cls.to_toml = to_toml  # type: ignore
-        cls.save_toml = save_toml  # type: ignore
-        # if not issubclass(cls, TomlCompatible):
-        cls.from_toml = classmethod(from_toml)  # type: ignore
-        cls.load_toml = classmethod(load_toml)  # type: ignore
-        # else:
-        #     install_classmethod(cls, "from_toml", from_toml)
-        #     install_classmethod(cls, "load_toml", load_toml)
-
-        return cls
-
-    if cls is None:
-        return decorator
-    else:
-        return decorator(cls)
+        return super().__new__(cls)
 
 
 def _add_comment(container: Any, comment: Optional[str]) -> None:
@@ -429,7 +195,8 @@ def _to_python_compatible(value: Any) -> Any:
 def _normalize_for_dataclass(*, value: Any, cls: type[Any], rename_key: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TypeError(
-            f"Expected TOML root to decode into dict for {cls.__name__}")
+            f"Expected TOML root to decode into dict for {cls.__name__}"
+        )
 
     hints = get_type_hints(cls, include_extras=True)
     out: dict[str, Any] = {}
@@ -483,7 +250,7 @@ def _normalize_for_type(*, value: Any, annotation: Any, rename_key: str) -> Any:
         return _normalize_for_dataclass(
             value=value,
             cls=annotation,  # type: ignore
-            rename_key=rename_key
+            rename_key=rename_key,
         )
 
     if origin is list and isinstance(value, list):
