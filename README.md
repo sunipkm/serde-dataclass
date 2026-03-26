@@ -38,7 +38,7 @@ class Database:
     port: int = field(default=5432, metadata={"description": "Database port"})
 
 @dataclass
-class AppConfig(TomlDataclass): # This subclass-derivation is optional, provides type annotations
+class AppConfig(TomlDataclass):
     """Application configuration"""  # This docstring will be used as the root comment
     app_name: str = field(
         default="demo",
