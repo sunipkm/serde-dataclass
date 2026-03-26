@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod, update_abstractmethods
 from dataclasses import fields, is_dataclass, asdict as dataclass_asdict
 from enum import Enum
-from importlib.metadata import version
+from json import JSONEncoder, loads, dumps
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Protocol, Self, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import Any, Literal, Optional, Self, TypeVar, Union, get_args, get_origin, get_type_hints
 
 import tomlkit
 from dacite import Config, from_dict
@@ -17,11 +16,12 @@ class JsonCompatible:
     """Subclass derivations get type annotations when
     decorated with @dataclass_json.
     """
+
     def to_json(self, **kwargs) -> str:
         """Convert this class to a JSON string.
 
         Arguments:
-            **kwargs: Passed through to `json.dumps()`
+            **kwargs: Passed through to `json.dumps()`. Note: if a custom JSONEncoder is set via the dataclass_json(ser=...) decorator argument, you cannot also specify a 'cls' argument here.
 
         Returns:
             str: JSON string representation of this object.
@@ -34,7 +34,7 @@ class JsonCompatible:
 
         Arguments:
             text: The JSON string to parse.
-            **kwargs: Passed through to `json.loads()`. May also include `config` for dacite Config.
+            kwargs: Passed through to `json.loads()`.
 
         Returns:
             An instance of this class.
@@ -46,6 +46,7 @@ class TomlCompatible:
     """Subclass derivations get type annotation
     when decorated with @dataclass_toml.
     """
+
     def to_toml(self) -> str:
         """Convert this class to a TOML string.
 
@@ -88,26 +89,47 @@ class TomlCompatible:
 
 
 def dataclass_json(
-    cls=None
+    cls=None,
+    /,
+    ser: Optional[type[JSONEncoder]] = None,
+    de: Optional[Config] = None,
 ):
     """
     Decorate a dataclass to add JSON serialization/deserialization helpers.
+    
+    Note: Nested dataclasses are supported without the need for additional decorators.
+    However, these nested dataclasses will not have their own to_json/from_json methods
+    unless they are also decorated.
+
+    Arguments:
+    - ser: Optional JSONEncoder subclass to use for to_json serialization.
+    - de: Optional dacite Config to use for from_json deserialization.
 
     Features:
     - `to_json(**kwargs)` method to serialize to JSON string (accepts same kwargs as `json.dumps()`)
-    - `from_json(text, **kwargs)` classmethod to deserialize from JSON string (accepts same kwargs as `json.loads()`, plus optional `config` for dacite Config)
+    - `from_json(text, config)` classmethod to deserialize from JSON string (accepts same kwargs as `json.loads()`, plus optional `config` for dacite Config)
     """
     def decorator(cls: type[T]) -> type[T]:
-        from json import dumps, loads
         if not is_dataclass(cls):
             raise TypeError("@dataclass_json must be applied after @dataclass")
 
         def to_json(self, **kwargs) -> str:
+            if ser is not None \
+                    and kwargs.get("cls") is not None:
+                raise ValueError(
+                    "Cannot specify both a custom JSONEncoder and a 'cls' argument to to_json()"
+                )
+            if ser is not None and not issubclass(ser, JSONEncoder):
+                raise TypeError(
+                    "ser argument to dataclass_json must be a subclass of json.JSONEncoder"
+                )
+
+            kwargs["cls"] = ser
             return dumps(dataclass_asdict(self), **kwargs)
 
-        def from_json(_cls, text: str, config: Optional[Config] = None, **kwargs) -> T:
+        def from_json(_cls, text: str, **kwargs) -> T:
             data = loads(text, **kwargs)
-            return from_dict(cls, data, config)
+            return from_dict(cls, data, de)
 
         to_json.__isabstractmethod__ = False  # type: ignore
         cls.to_json = to_json  # type: ignore
@@ -130,16 +152,20 @@ def dataclass_toml(
     root_comment: Optional[str] = None,
     metadata_key: str = "description",
     rename_key: str = "toml",
-    config: Optional[Config] = None,
+    de: Optional[Config] = None,
 ):
     """
     Decorate a dataclass to add TOML load/save helpers.
+
+    Note: Nested dataclasses are supported without the need for additional decorators.
+    However, these nested dataclasses will not have their own to_toml/from_toml methods
+    unless they are also decorated.
 
     Arguments:
     - root_comment: Optional comment to add at the top of the TOML document. Can also be set via the class docstring or __toml_comment__ attribute.
     - metadata_key: The key in field metadata to look for comments (default "description")
     - rename_key: The key in field metadata to look for TOML key renaming (default "toml")
-    - config: Optional dacite Config to use for loading.
+    - de: Optional dacite Config to use for loading.
 
     Features:
     - `to_toml()` method to serialize to TOML string
@@ -169,7 +195,7 @@ def dataclass_toml(
             or (cls.__doc__.strip() if cls.__doc__ else None)
         )
 
-        cfg = config or Config(
+        cfg = de or Config(
             cast=[tuple],
             check_types=True,
         )

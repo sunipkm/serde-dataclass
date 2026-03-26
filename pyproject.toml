@@ -12,22 +12,22 @@ dependencies = [
   "dacite>=1.8",
   "tomlkit>=0.12",
 ]
-authors = [
-  { name = "Sunip K. Mukherjee <sunipkmukherjee@gmail.com>" }
-]
+authors = [{ name = "Sunip K. Mukherjee <sunipkmukherjee@gmail.com>" }]
 license = { text = "MIT" }
 keywords = ["toml", "dataclass", "dacite", "tomlkit", "config"]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.0",
+  "pytest>=8.0", 
+  "numpy>=1.22", 
+  "astropy>=5.0"
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

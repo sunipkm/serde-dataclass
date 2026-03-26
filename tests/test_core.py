@@ -281,7 +281,7 @@ try:
 
             @dataclass_json
             @dataclass_toml(
-                config=Config(
+                de=Config(
                     type_hooks={np.ndarray: type_hook_ndarray, Quantity: type_hook_quantity})
             )
             @dataclass
