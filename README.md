@@ -10,7 +10,7 @@ Project documentation is provided through MkDocs.
 
 ```bash
 pip install -e .[docs]
-/home/sunip/.miniconda3/bin/python -m mkdocs serve
+mkdocs serve
 ```
 
 Detailed usage is documented in `docs/`.
