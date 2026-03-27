@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, Callable, Literal, Optional, TypeVar, Union, get_args, get_origin, get_type_hints
+import sys
+from typing import Annotated, Any, Callable, Literal, Optional, TypeVar, Union, get_args, get_origin, get_type_hints
 
 import tomlkit
 
 T = TypeVar("T")
+
+TypeChecker = Callable[[Any, Annotated], None]
 
 
 class _DataclassEnforcer:

@@ -124,7 +124,7 @@ def check_quantity_length(value: Quantity, annotation: Any):
     if value.unit is None:
         raise ValueError(f"Value {value} must have units")
     # Just check that it's a length, but don't raise an error
-    if not value.unit.is_equivalent(u.meter):
+    if value.unit.physical_type != "length":
         raise ValueError(f"Value {value} is not a length")
 
 

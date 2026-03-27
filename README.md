@@ -1,27 +1,33 @@
 # serde-dataclass
 
-Helpers for serializing dataclasses to TOML (and JSON) with:
+TOML and JSON serialization for Python dataclasses is provided through a small, explicit API.
 
-- Inline comments for scalar values
-- Non-inline comments for tables and arrays of tables
-- Root document comment (can be extracted from class docstring)
-- Nested dataclasses
-- Collections (lists, dicts, tuples, sets)
-- Key renaming
-- Support for `Enum` and `Literal` types with validation
-- Custom type hooks for serialization and deserialization
+Comment-preserving TOML output, renamed keys, nested dataclasses, and typed round-trips are supported.
 
-## Install
+## Documentation
+
+Project documentation is provided through MkDocs.
+
+```bash
+pip install -e .[docs]
+/home/sunip/.miniconda3/bin/python -m mkdocs serve
+```
+
+Detailed usage is documented in `docs/`.
+
+## Installation
 
 ```bash
 pip install serde-dataclass
 ```
 
-## Usage
-To use, simply derive your dataclass from `TomlDataclass` (TOML) and/or `JsonDataclass` (JSON) and use the provided `to_toml`, `from_toml`, `to_json`, and `from_json` methods.
-The `toml_config` and `json_config` decorators can be used to customize the behavior of the generated methods, e.g. by providing custom encoders/decoders, or setting the keys in field metadata to look for comments, renaming, and type checking.
+For development and example dependencies:
 
-## Example
+```bash
+pip install -e .[dev]
+```
+
+## Quick Start
 
 ```python
 from dataclasses import dataclass, field
@@ -41,9 +47,11 @@ class Database:
     host: str = field(metadata={"description": "Database host"})
     port: int = field(default=5432, metadata={"description": "Database port"})
 
+
 @dataclass
 class AppConfig(TomlDataclass):
-    """Application configuration"""  # This docstring will be used as the root comment
+    """Application configuration"""
+
     app_name: str = field(
         default="demo",
         metadata={"description": "Application name", "toml": "app-name"},
@@ -58,10 +66,13 @@ class AppConfig(TomlDataclass):
         metadata={"description": "Database settings"},
     )
 
+
 cfg = AppConfig()
 text = cfg.to_toml()
 loaded = AppConfig.from_toml(text)
 
+assert loaded == cfg
+print(text)
 ```
 
 Example output:
@@ -79,159 +90,26 @@ host = "localhost" # Database host
 port = 5432 # Database port
 ```
 
-## Supported Dataclass Annotations
-- Class-level documentation
-  - Docstring
-  - `root_comment` through `toml_config`
-- Field customization through dataclass field metadata
-  - Comments (key defaults to `description`, applicable to TOML conversion only):
-    ```py
-    @dataclass
-    class Dummy:
-        """This is a dummy class""" # Docstring becomes top-level description of output TOML
-        value: field(metadata={"description": "Some value"})
-    ```
-  - Field renaming (key defaults to `toml`):
-    Renames a field name to maintain compatibility with serialization (e.g. `log_level` to `log-level`)
-    ```py
-    @dataclass
-    class Dummy:
-        value: field(metadata={"toml": "some-value"}) # key `value` becomes `some-value`
-    ```
-  - Specific type checking (key defaults to `typecheck`):
-    Executes the provided function with the value and the type annotation ([`typing.Annotated`](https://docs.python.org/3/library/typing.html#typing.Annotated)) [`Callable[[Any, Annotated[Any]]]`].
-    This function should raise a `ValueError` if the specialization is not met, e.g.
-    ```py
-    def quantity_length(value: Quantity, _):
-        if value.unit.physical_type != "length":
-            raise ValueError("Quantity must have length units")
-    ```
+## Summary
 
-## Advanced Usage: Custom Types
+- `TomlDataclass` and `JsonDataclass` are provided as base [mixins](https://en.wikipedia.org/wiki/Mixin).
+- Root comments, field comments, renamed keys, and nested dataclasses are supported.
+- `Enum`, `Literal`, `Optional`, lists, tuples, sets, and `dict[str, T]` are supported.
+- Custom loading is configured through `dacite.Config`.
+- Custom serialization is integrated through `json.JSONEncoder` and `tomlkit` encoders.
 
-Custom hooks can be installed for custom types.
-The following example handles `numpy` arrays and
-`astropy` quantities. The complete, working example
-is provided [here](examples/custom_types.py).
+## Notes
 
-#### Custom serializer/deserializer
-<!--phmdoctest-skip-->
-```python
-# %% Encoders and decoders for custom types
-# Register tomlkit encoder
-@register_encoder
-def quantity_to_toml(obj, /, _parent=None, _sort_keys=False):
-    """Convert an astropy Quantity to a string representation suitable for TOML serialization.
+- TOML comments are emitted only for TOML serialization.
+- Dictionary keys are required to be strings.
+- Fields with `None` values are omitted from TOML output.
 
-    Args:
-        qty (Quantity): The astropy Quantity to convert.
-    Returns:
-        str: A string representation of the Quantity in the format "value unit", e.g. "1.0 deg".
-    """
-    if isinstance(obj, Quantity):
-        return tomlitem(f'{obj}')
-    elif isinstance(obj, np.ndarray):
-        return tomlitem(obj.tolist())
-    raise TypeError(f'Object of type {type(obj)} is not a Quantity')
-# Generate dacite type hooks
-class CustomHooks:
-    @staticmethod
-    def dacite_quantity_hook(s: str) -> Quantity:
-        return Quantity(s)
+## Development
 
-    @staticmethod
-    def dacite_ndarray_hook(s: list) -> np.ndarray:
-        return np.array(s)
-
-    @property
-    def dacite_hooks(self) -> Dict[Type, Callable[[Any], Any]]:
-        return {
-            Quantity: self.dacite_quantity_hook,
-            np.ndarray: self.dacite_ndarray_hook,
-        }
-# Custom JSON encoder
-class CustomEncoder(JSONEncoder):
-    """Custom JSON encoder for astropy Quantity objects."""
-
-    def default(self, o):
-        if isinstance(o, Quantity):
-            return f'{o}'
-        elif isinstance(o, np.ndarray):
-            return o.tolist()
-        return super().default(o)
+```bash
+pytest -q
 ```
 
-#### Custom Dataclass
-<!--phmdoctest-skip-->
-```python
-# %% Custom class definition
-@dataclass
-class Nesting:  # Note: The nested dataclass does not need to
-    # derive from TomlDataclass or JsonDataclass
-    """A simple nested dataclass to demonstrate nested structures."""
-    value: int = field(metadata={'description': 'An integer value'})
+## License
 
-
-@json_config(ser=CustomEncoder, de=Config(type_hooks=CustomHooks().dacite_hooks))
-@toml_config(de=Config(type_hooks=CustomHooks().dacite_hooks))
-@dataclass
-class NpTest(TomlDataclass, JsonDataclass):
-    """Test class with a numpy array and an astropy Quantity."""
-    arr: np.ndarray = field(metadata={'description': 'A numpy array'})
-    qty: Quantity['dimensionless'] = field(
-        metadata={'description': 'A dimensionless quantity'})
-    nesting: Nesting = field(default_factory=lambda: Nesting(
-        42), metadata={'description': 'A nested dataclass'})
-
-    def __eq__(self, other):
-        if not isinstance(other, NpTest):
-            return NotImplemented
-        return np.array_equal(self.arr, other.arr) and self.qty == other.qty
-```
-
-#### Usage
-<!--phmdoctest-skip-->
-```python
-# %% Test the class
-
-
-a = NpTest(
-    arr=np.array([[1, 2, 3], [4, 5, 6]]),
-    qty=Quantity(1.0, u.dimensionless_unscaled),
-)
-print(a.to_json(indent=4))
-print(a.to_toml())
-b = NpTest.from_json(a.to_json())
-c = NpTest.from_toml(a.to_toml())
-assert a == b
-assert b == c
-assert c == a
-```
-
-This outputs the following JSON:
-
-```json
-{
-  "arr": [
-    [1, 2, 3],
-    [4, 5, 6]
-  ],
-  "qty": "1.0",
-  "nesting": {
-    "value": 42
-  }
-}
-```
-
-And the following TOML:
-
-```toml
-# Test class with a numpy array and an astropy Quantity.
-
-arr = [[1, 2, 3], [4, 5, 6]] # A numpy array
-qty = "1.0" # A dimensionless quantity
-# A nested dataclass
-
-[nesting]
-value = 42 # An integer value
-```
+MIT

@@ -1,56 +1,71 @@
-# toml_dataclass - A dataclass-based library for TOML serialization with comment support
-"""
-TOML Dataclass
------------------
+"""Public package interface for serde-dataclass.
 
-TOML Dataclass provides base classes TomlDataclass and JsonDataclass for easy 
-serialization and deserialization of dataclasses to and from TOML and JSON 
-formats, respectively.
+The package exposes two dataclass mixins:
 
-It supports features such as:
-- Support for comments on fields and the root document
-- Custom key names for TOML fields
-- Nested dataclasses
-- Collections (lists, dicts, tuples, sets)
-- Support for `Enum` and `Literal` types with validation
-- Custom type hooks for serialization and deserialization
+- ``TomlDataclass`` for TOML serialization and deserialization
+- ``JsonDataclass`` for JSON serialization and deserialization
 
-Example usage:
-```python
-from dataclasses import dataclass, field
-from toml_dataclass import dataclass_toml
-@dataclass_toml(root_comment="Application configuration")
-@dataclass
-class AppConfig:
-    \"\"\"Application configuration\"\"\"  # This docstring will be used as the root comment
-    app_name: str = field(
-        default="demo",
-        metadata={"description": "Application name", "toml": "app-name"},
-    )
-    log_level: str = field(
-        default="info",
-        metadata={"description": "Log level", "toml": "log-level"},
-    )
-# Create an instance
-config = AppConfig()
-# Serialize to TOML
-toml_text = config.to_toml()
-print(toml_text)
-# Deserialize from TOML
-loaded_config = AppConfig.from_toml(toml_text)
-print(loaded_config)
-```
+TOML support includes:
 
-A `@dataclass_json` decorator is also provided for JSON serialization and deserialization with similar features, without comment support.
+- root document comments from a class docstring or ``toml_config(...)``
+- field comments via dataclass field metadata
+- field renaming for serialized keys
+- nested dataclasses and arrays of tables
+- validation for ``Enum`` and ``Literal`` annotations
+- custom loaders through ``dacite.Config``
+
+The expected usage pattern is to inherit from one or both mixins and still
+decorate the class with ``@dataclass``.
+
+Example:
+
+    >>> from dataclasses import dataclass, field
+    >>> from enum import Enum
+    >>> from typing import Literal
+    >>>
+    >>> class Mode(str, Enum):
+    ...     DEV = "dev"
+    ...     PROD = "prod"
+    ...
+    >>> @dataclass
+    ... class Database:
+    ...     host: str = field(metadata={"description": "Database host"})
+    ...     port: int = field(default=5432, metadata={"description": "Database port"})
+    ...
+    >>> @dataclass
+    ... class AppConfig(TomlDataclass):
+    ...     '''Application configuration'''
+    ...     app_name: str = field(
+    ...         default="demo",
+    ...         metadata={"description": "Application name", "toml": "app-name"},
+    ...     )
+    ...     log_level: Literal["debug", "info", "warning", "error"] = field(
+    ...         default="info",
+    ...         metadata={"description": "Logging verbosity", "toml": "log-level"},
+    ...     )
+    ...     mode: Mode = field(default=Mode.DEV, metadata={"description": "Runtime mode"})
+    ...     database: Database = field(
+    ...         default_factory=lambda: Database(host="localhost"),
+    ...         metadata={"description": "Database settings"},
+    ...     )
+    ...
+    >>> cfg = AppConfig()
+    >>> loaded = AppConfig.from_toml(cfg.to_toml())
+    >>> loaded == cfg
+    True
+
+For fuller usage guidance, see the repository documentation under ``docs/``.
 """
 from importlib.metadata import version
 
 from .iface import JsonDataclass, TomlDataclass, json_config, toml_config
+from .core import TypeChecker
 
 __version__ = version(__package__ or "toml_dataclass")
 
 __all__ = [
     "JsonDataclass", "TomlDataclass",
     "json_config", "toml_config",
+    "TypeChecker",
     "__version__"
 ]

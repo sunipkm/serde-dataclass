@@ -12,3 +12,5 @@
 **/._*
 **/Thumbs.db
 tests/test_readme.py
+site
+.venv
