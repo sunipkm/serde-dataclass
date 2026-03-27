@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import is_dataclass, asdict as dataclass_asdict
 from json import JSONEncoder, loads, dumps
 from pathlib import Path
-from typing import Optional, TypeVar, Union
+from typing import Literal, Optional, TypeVar, Union
 import sys
 
 import tomlkit
 from dacite import Config, from_dict
 
-from .core import _DataclassEnforcer, _write_dataclass_to_container, _normalize_for_dataclass
+from .core import _DataclassEnforcer, _typecheck_dataclass, _write_dataclass_to_container, _normalize_for_dataclass
 
 T = TypeVar("T")
 
@@ -29,6 +29,7 @@ class JsonDataclass(_DataclassEnforcer):
 
     __json_encoder__: Optional[type[JSONEncoder]] = None
     __json_dacite_config__: Optional[Config] = None
+    __json_typecheck_key__: str = "typecheck"
 
     def to_json(self, **kwargs) -> str:
         """
@@ -73,7 +74,7 @@ class JsonDataclass(_DataclassEnforcer):
             )
 
         data = loads(text, **kwargs)
-        return from_dict(cls, data, getattr(cls, "__json_dacite_config__", None))
+        return _perform_type_check(cls, data, kind="json")
 
 
 class TomlDataclass(_DataclassEnforcer):
@@ -91,6 +92,7 @@ class TomlDataclass(_DataclassEnforcer):
         cast=[tuple],
         check_types=True,
     )
+    __toml_typecheck_key__: str = "typecheck"
 
     def to_toml(self) -> str:
         """
@@ -152,11 +154,7 @@ class TomlDataclass(_DataclassEnforcer):
             cls=cls,
             rename_key=getattr(cls, "__toml_rename_key__", "toml"),
         )
-        return from_dict(
-            data_class=cls,
-            data=normalized,
-            config=getattr(cls, "__toml_dacite_config__"),
-        )
+        return _perform_type_check(cls, normalized, kind="toml")
 
     @classmethod
     def load_toml(cls, path: Union[str, Path]) -> Self:
@@ -216,8 +214,9 @@ def toml_config(
     /,
     *,
     root_comment: Optional[str] = None,
-    metadata_key: Optional[str] = None,
-    rename_key: Optional[str] = None,
+    description_key: str = "description",
+    rename_key: str = "toml",
+    typecheck_key: str = "typecheck",
     de: Optional[Config] = None,
 ):
     """
@@ -225,8 +224,9 @@ def toml_config(
 
     Arguments:
         root_comment: Optional comment to add at the top of the TOML document.
-        metadata_key: The key in field metadata to look for comments.
-        rename_key: The key in field metadata to look for TOML key renaming.
+        description_key: The key in field metadata to look for descriptions. Defaults to "description".
+        rename_key: The key in field metadata to look for TOML key renaming. Defaults to "toml".
+        typecheck_key: The key in field metadata to look for type checking functions. Defaults to "typecheck".
         de: Optional dacite Config to use for loading.
     """
 
@@ -242,11 +242,14 @@ def toml_config(
 
         setattr(cls, "__toml_root_comment__", resolved_root_comment)
 
-        if metadata_key is not None:
-            setattr(cls, "__toml_metadata_key__", metadata_key)
+        if description_key is not None:
+            setattr(cls, "__toml_metadata_key__", description_key)
 
         if rename_key is not None:
             setattr(cls, "__toml_rename_key__", rename_key)
+
+        if typecheck_key is not None:
+            setattr(cls, "__toml_typecheck_key__", typecheck_key)
 
         if de is not None:
             setattr(cls, "__toml_dacite_config__", de)
@@ -257,3 +260,14 @@ def toml_config(
         return decorator
     else:
         return decorator(cls)
+
+
+def _perform_type_check(cls, normalized, kind: Literal["json", "toml"]):
+    dcls = from_dict(
+        data_class=cls,
+        data=normalized,
+        config=getattr(cls, f"__{kind}_dacite_config__"),
+    )
+    typecheck = getattr(cls, f"__{kind}_typecheck_key__")
+    _typecheck_dataclass(dcls, typecheck_key=typecheck)
+    return dcls

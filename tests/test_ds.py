@@ -1,4 +1,10 @@
 from __future__ import annotations
+from dacite import Config
+from tomlkit.exceptions import ConvertError
+from tomlkit import register_encoder, item
+import astropy.units as astrounits
+from astropy.units import Quantity
+import numpy as np
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -244,13 +250,6 @@ def test_set():
     assert loaded.items == {"a", "b"}
 
 
-import numpy as np
-from astropy.units import Quantity
-import astropy.units as astrounits
-from tomlkit import register_encoder, item, string
-from tomlkit.exceptions import ConvertError
-from tomlkit.items import Item
-
 @register_encoder
 def encode_quantity(value, /, _parent=None, _sort_keys=False):
     if isinstance(value, Quantity):
@@ -260,29 +259,33 @@ def encode_quantity(value, /, _parent=None, _sort_keys=False):
     else:
         raise ConvertError
 
+
+def type_hook_ndarray(value):
+    arr = np.array(value)
+    return arr
+
+
+def type_hook_quantity(value):
+    q = Quantity(value)
+    return q
+
+
+class NumpyEncoder(JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if isinstance(o, Quantity):
+            return str(o)
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        return super().default(o)
+
+
+de = Config(type_hooks={
+    np.ndarray: type_hook_ndarray,
+    Quantity: type_hook_quantity,
+})
+
+
 def test_ndarray():
-    from dacite import Config
-
-    def type_hook_ndarray(value):
-        arr = np.array(value)
-        return arr
-
-    def type_hook_quantity(value):
-        q = Quantity(value)
-        return q
-
-    class NumpyEncoder(JSONEncoder):
-        def default(self, o: Any) -> Any:
-            if isinstance(o, Quantity):
-                return str(o)
-            if isinstance(o, np.ndarray):
-                return o.tolist()
-            return super().default(o)
-
-    de = Config(type_hooks={
-        np.ndarray: type_hook_ndarray,
-        Quantity: type_hook_quantity,
-    })
 
     @json_config(
         ser=NumpyEncoder,
@@ -328,3 +331,33 @@ def test_tomldataclass():
 the-value = 42 # The answer
 """
     assert text == output
+
+
+def test_custom_typecheck():
+
+    def check_qty_is_length(q: Quantity, _) -> None:
+        if not q.unit:
+            raise ValueError("Quantity must have units")
+        if q.unit.physical_type != "length":
+            raise ValueError("Quantity must have length units")
+
+    @dataclass
+    @toml_config(de=de)
+    class TypeCheckConfig(TomlDataclass):
+        value: Quantity['length'] = field(
+            default_factory=lambda: 5 * astrounits.meter,
+            metadata={
+                "description": "A quantity with units",
+                "typecheck": check_qty_is_length,
+            }
+        )
+
+    cfg = TypeCheckConfig()
+    text = cfg.to_toml()
+    assert 'value = "5.0 m" # A quantity with units' in text
+    loaded = TypeCheckConfig.from_toml(text)
+    assert loaded.value == 5 * astrounits.meter
+    modified = text.replace("5.0 m", "5.0 s")
+    # TypeCheckConfig.from_toml(modified)  # Should succeed since typecheck is not set
+    with pytest.raises(ValueError, match="Custom typecheck failed"):
+        TypeCheckConfig.from_toml(modified)

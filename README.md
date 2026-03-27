@@ -17,6 +17,10 @@ Helpers for serializing dataclasses to TOML (and JSON) with:
 pip install serde-dataclass
 ```
 
+## Usage
+To use, simply derive your dataclass from `TomlDataclass` (TOML) and/or `JsonDataclass` (JSON) and use the provided `to_toml`, `from_toml`, `to_json`, and `from_json` methods.
+The `toml_config` and `json_config` decorators can be used to customize the behavior of the generated methods, e.g. by providing custom encoders/decoders, or setting the keys in field metadata to look for comments, renaming, and type checking.
+
 ## Example
 
 ```python
@@ -74,6 +78,34 @@ mode = "dev" # Runtime mode
 host = "localhost" # Database host
 port = 5432 # Database port
 ```
+
+## Supported Dataclass Annotations
+- Class-level documentation
+  - Docstring
+  - `root_comment` through `toml_config`
+- Field customization through dataclass field metadata
+  - Comments (key defaults to `description`, applicable to TOML conversion only):
+    ```py
+    @dataclass
+    class Dummy:
+        """This is a dummy class""" # Docstring becomes top-level description of output TOML
+        value: field(metadata={"description": "Some value"})
+    ```
+  - Field renaming (key defaults to `toml`):
+    Renames a field name to maintain compatibility with serialization (e.g. `log_level` to `log-level`)
+    ```py
+    @dataclass
+    class Dummy:
+        value: field(metadata={"toml": "some-value"}) # key `value` becomes `some-value`
+    ```
+  - Specific type checking (key defaults to `typecheck`):
+    Executes the provided function with the value and the type annotation ([`typing.Annotated`](https://docs.python.org/3/library/typing.html#typing.Annotated)) [`Callable[[Any, Annotated[Any]]]`].
+    This function should raise a `ValueError` if the specialization is not met, e.g.
+    ```py
+    def quantity_length(value: Quantity, _):
+        if value.unit.physical_type != "length":
+            raise ValueError("Quantity must have length units")
+    ```
 
 ## Advanced Usage: Custom Types
 

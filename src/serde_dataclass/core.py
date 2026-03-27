@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, Literal, Optional, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Literal, Optional, TypeVar, Union, get_args, get_origin, get_type_hints
 
 import tomlkit
 
@@ -168,6 +168,17 @@ def _to_toml_item(
 
 
 def _to_python_compatible(value: Any) -> Any:
+    """Convert a value to a Python-compatible type for TOML serialization.
+
+    Args:
+        value (Any): The value to convert.
+
+    Raises:
+        TypeError: If the value is not of a supported type.
+
+    Returns:
+        Any: The converted value.
+    """
     if is_dataclass(value):
         return {
             f.name: _to_python_compatible(getattr(value, f.name))
@@ -193,6 +204,19 @@ def _to_python_compatible(value: Any) -> Any:
 
 
 def _normalize_for_dataclass(*, value: Any, cls: type[Any], rename_key: str) -> dict[str, Any]:
+    """Normalize the given value for a dataclass.
+
+    Args:
+        value (Any): A dictionary to normalize for the given dataclass.
+        cls (type[Any]): The dataclass type to normalize for.
+        rename_key (str): Rename the key for dataclass.
+
+    Raises:
+        TypeError: If the value is not a dictionary.
+
+    Returns:
+        dict[str, Any]: The normalized dictionary.
+    """
     if not isinstance(value, dict):
         raise TypeError(
             f"Expected TOML root to decode into dict for {cls.__name__}"
@@ -216,7 +240,40 @@ def _normalize_for_dataclass(*, value: Any, cls: type[Any], rename_key: str) -> 
     return out
 
 
+def _typecheck_dataclass(vdict, typecheck_key: str):
+    cls = type(vdict)
+    hints = get_type_hints(type(vdict), include_extras=True)
+
+    for f in fields(cls):
+        py_name = f.name
+        annotation = hints.get(py_name, f.type)
+        typecheck = f.metadata.get(typecheck_key, None)
+
+        if typecheck and annotation is not Any:
+            value = getattr(vdict, py_name)
+            try:
+                typecheck(value, annotation)
+            except Exception as e:
+                raise ValueError(
+                    f"Custom typecheck failed for field '{py_name}' with value {value!r}: {e}"
+                ) from e
+
+
 def _normalize_for_type(*, value: Any, annotation: Any, rename_key: str) -> Any:
+    """Normalize the given value for a type annotation.
+
+    Args:
+        value (Any): Value to normalize.
+        annotation (Any): Type annotation for the value.
+        rename_key (str): Rename the key for dataclass.
+
+    Raises:
+        ValueError: If the value is not valid for the given annotation.
+        TypeError: If the value is not of the expected type.
+
+    Returns:
+        Any: The normalized value.
+    """
     if annotation is Any:
         return value
 
@@ -256,8 +313,10 @@ def _normalize_for_type(*, value: Any, annotation: Any, rename_key: str) -> Any:
     if origin is list and isinstance(value, list):
         inner = args[0] if args else Any
         return [
-            _normalize_for_type(value=v, annotation=inner,
-                                rename_key=rename_key)
+            _normalize_for_type(
+                value=v, annotation=inner,
+                rename_key=rename_key
+            )
             for v in value
         ]
 
@@ -265,7 +324,9 @@ def _normalize_for_type(*, value: Any, annotation: Any, rename_key: str) -> Any:
         if len(args) == 2 and args[1] is Ellipsis:
             return tuple(
                 _normalize_for_type(
-                    value=v, annotation=args[0], rename_key=rename_key)
+                    value=v, annotation=args[0],
+                    rename_key=rename_key
+                )
                 for v in value
             )
         if args:
@@ -282,8 +343,10 @@ def _normalize_for_type(*, value: Any, annotation: Any, rename_key: str) -> Any:
     if origin is set and isinstance(value, list):
         inner = args[0] if args else Any
         return {
-            _normalize_for_type(value=v, annotation=inner,
-                                rename_key=rename_key)
+            _normalize_for_type(
+                value=v, annotation=inner,
+                rename_key=rename_key,
+            )
             for v in value
         }
 
@@ -292,7 +355,10 @@ def _normalize_for_type(*, value: Any, annotation: Any, rename_key: str) -> Any:
         if key_t not in (str, Any):
             raise TypeError("TOML only supports string dictionary keys")
         return {
-            str(k): _normalize_for_type(value=v, annotation=val_t, rename_key=rename_key)
+            str(k): _normalize_for_type(
+                value=v, annotation=val_t,
+                rename_key=rename_key,
+            )
             for k, v in value.items()
         }
 

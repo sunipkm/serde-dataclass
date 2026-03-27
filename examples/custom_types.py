@@ -47,7 +47,7 @@ class CustomHooks:
             Quantity: self.dacite_quantity_hook,
             np.ndarray: self.dacite_ndarray_hook,
         }
-    
+
     @property
     def dacite_conf(self) -> Config:
         return Config(type_hooks=self.dacite_hooks)
@@ -71,7 +71,6 @@ class Nesting:  # Note: The nested dataclass does not need to be
     # decorated with dataclass_json or dataclass_toml
     """A simple nested dataclass to demonstrate nested structures."""
     value: int = field(metadata={'description': 'An integer value'})
-
 
 
 @dataclass
@@ -118,4 +117,38 @@ tempfile.write(a.to_toml())
 tempfile.seek(0)
 c_from_file = NpTest.from_toml(tempfile.read())
 assert a == c_from_file
+# %% Custom type checking
+
+
+def check_quantity_length(value: Quantity, annotation: Any):
+    if value.unit is None:
+        raise ValueError(f"Value {value} must have units")
+    # Just check that it's a length, but don't raise an error
+    if not value.unit.is_equivalent(u.meter):
+        raise ValueError(f"Value {value} is not a length")
+
+
+@dataclass
+@toml_config(de=CustomHooks().dacite_conf)
+class TypeCheckConfig(TomlDataclass):
+    value: Quantity['length'] = field(
+        default_factory=lambda: 5 * u.meter,
+        metadata={
+            "description": "A quantity with units",
+            "typecheck": check_quantity_length,
+        }
+    )
+
+
+cfg = TypeCheckConfig()
+text = cfg.to_toml()
+assert 'value = "5.0 m" # A quantity with units' in text
+loaded = TypeCheckConfig.from_toml(text)
+assert loaded.value == 5 * u.meter
+modified = text.replace("5.0 m", "5.0 s")
+
+try:
+    TypeCheckConfig.from_toml(modified)  # Should fail since it's not a length
+except ValueError as e:
+    print(f"Type check failed as expected: {e}")
 # %%
