@@ -8,15 +8,17 @@ all: test testfiles
 testfiles: $(TESTFILES)
 
 tests/test_%.py: docs/%.md
-	echo "Generating test file for $<"
-	phmdoctest $< --outfile $@
+	@echo "Generating test file for $<"
+	@phmdoctest $< --outfile $@
 
 tests/test_readme.py: README.md
-	echo "Generating test file for README.md"
-	phmdoctest README.md --outfile tests/test_readme.py
+	@echo "Generating test file for README.md"
+	@phmdoctest README.md --outfile tests/test_readme.py
 
 test: $(TESTFILES) tests/test_readme.py
-	pytest -q
+	@echo "Running tests"
+	@pytest -q
 
 clean:
-	echo "Cleaning up generated test files" $(TESTFILES)
+	@echo "Cleaning up generated test files" $(TESTFILES)
+	@rm -vf $(TESTFILES) tests/test_readme.py
