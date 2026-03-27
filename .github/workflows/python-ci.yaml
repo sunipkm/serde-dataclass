@@ -27,6 +27,7 @@ jobs:
                   pip install pytest
                   pip install phmdoctest
                   phmdoctest README.md --outfile tests/test_readme.py
+                  for file in docs/*.md; do phmdoctest "$file" --outfile "tests/test_$(basename "${file%.md}").py"; done
                   pip install astropy # For pytest
                   # Install your package (editable mode)
                   pip install -e .

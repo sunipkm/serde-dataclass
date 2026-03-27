@@ -1,6 +1,6 @@
 # %% Imports
 from __future__ import annotations
-from typing import Any, Callable, Dict, Type
+from typing import Any, Callable, Dict, List, Type
 from dacite import Config
 from serde_dataclass import JsonDataclass, TomlDataclass, json_config, toml_config
 from dataclasses import dataclass, field
@@ -149,6 +149,128 @@ modified = text.replace("5.0 m", "5.0 s")
 
 try:
     TypeCheckConfig.from_toml(modified)  # Should fail since it's not a length
+except ValueError as e:
+    print(f"Type check failed as expected: {e}")
+# %% Nested non-serializable dataclass with type checking
+
+
+@dataclass
+class NotTomlSerializable:
+    """A not-serializable class
+    """
+    value: Quantity['length'] = field(
+        default_factory=lambda: 5 * u.meter,
+        metadata={
+            "description": "A quantity with units",
+            "typecheck": check_quantity_length,
+        }
+    )
+
+
+@dataclass
+@toml_config(de=CustomHooks().dacite_conf)
+class WithNonSerializable(TomlDataclass):
+    """A dataclass containing a non-serializable field
+    """
+    not_serializable: NotTomlSerializable = field(
+        default_factory=NotTomlSerializable,
+        metadata={
+            "description": "A non-serializable field",
+        }
+    )
+    other_value: int = field(default=42, metadata={
+                             "description": "Another value"})
+
+
+cfg = WithNonSerializable()
+text = cfg.to_toml()
+loaded = WithNonSerializable.from_toml(text)
+assert loaded == cfg
+
+modified = text.replace("5.0 m", "10.0 s")
+try:
+    loaded_err = WithNonSerializable.from_toml(
+        modified)  # Should fail since it's not a length
+    print(loaded_err)
+except ValueError as e:
+    print(f"Type check failed as expected: {e}")
+# %% Type checking at serialization
+
+
+def check_positive(value: int, annotation: Any):
+    if value <= 0:
+        raise ValueError(f"Value {value} must be positive")
+
+
+@dataclass
+class Nested:
+    nested_value: int = field(
+        default=1,
+        metadata={
+            "description": "A nested value that must be positive",
+            "typecheck": check_positive,
+        }
+    )
+
+
+@dataclass
+class NestedConfig(TomlDataclass):
+    value: int = field(metadata={"description": "Example value"})
+    nested: Nested = field(metadata={"description": "A nested dataclass"})
+
+
+cfg = NestedConfig(value=10, nested=Nested(nested_value=5))  # Valid
+text = cfg.to_toml()  # Should succeed without errors
+try:
+    # Invalid, should raise ValueError
+    cfg = NestedConfig(value=10, nested=Nested(nested_value=-3))
+    text = cfg.to_toml()  # Type check should be performed during serialization
+except ValueError as e:
+    print(f"Type check failed as expected: {e}")
+# %% Nested dataclass with type checking
+
+
+@dataclass
+class Inner:
+    value: int = field(
+        default=1,
+        metadata={
+            "description": "A positive integer",
+            "typecheck": check_positive,
+        }
+    )
+
+
+@dataclass
+class Outer(TomlDataclass):
+    inner: Inner = field(
+        default_factory=Inner,
+        metadata={
+            "description": "Nested dataclass with typecheck"
+        }
+    )
+    value: int = field(
+        default=10,
+        metadata={
+            "description": "An integer field",
+        }
+    )
+    innerlist: List[Inner] = field(
+        default_factory=lambda: [Inner(value=2), Inner(value=3)],
+        metadata={
+            "description": "A list of Inner dataclasses"
+        }
+    )
+
+
+cfg = Outer()
+text = cfg.to_toml()
+assert 'value = 1 # A positive integer' in text
+loaded = Outer.from_toml(text)
+assert loaded.inner.value == 1
+cfg.innerlist[-1].value = -1
+try:
+    cfg.to_toml()
 except ValueError as e:
     print(f"Type check failed as expected: {e}")
 # %%

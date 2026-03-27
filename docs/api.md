@@ -48,6 +48,8 @@ class Config(TomlDataclass):
 
 The `Config` class definition above is equivalent to the following without using `toml_config(...)`:
 
+<!--phmdoctest-skip-->
+
 ```python
 @dataclass
 class Config(TomlDataclass):
@@ -64,25 +66,6 @@ Decorator for configuring JSON behavior on a class.
 
 - `ser`: a custom `json.JSONEncoder` subclass for serialization
 - `de`: `dacite.Config` used during deserialization
-
-### Dataclass Field Metadata
-
-Dataclass fields can be annotated with the following metadata keys:
-
-- `description`: a string used as a comment in TOML output (can be customized with `description_key` in `toml_config(...)`)
-- `toml`: a string used as the serialized key in TOML output (can be customized with `rename_key` in `toml_config(...)`)
-- `typecheck`: a callable used for custom validation during deserialization (can be customized with `typecheck_key` in `toml_config(...)`)
-
-#### Type Validation
-
-The type validation is performed during dataclass instantiation. If a field has a `typecheck` validator,
-the validator is called with the field value and its annotation. If the validator raises a `ValueError`, the instantiation will fail with the same error. The type checking function has the following signature:
-
-```python
-from typing import Any, Annotated, Callable
-
-TypeChecker = Callable[[Any, Annotated], None]
-```
 
 ### Example
 
@@ -101,4 +84,86 @@ class CustomEncoder(JSONEncoder):
 @json_config(ser=CustomEncoder)
 class Payload(JsonDataclass):
     name: str
+```
+
+## Dataclass Field Metadata
+
+Dataclass fields can be annotated with the following metadata keys:
+
+- `description`: a string used as a comment in TOML output (can be customized with `description_key` in `toml_config(...)`)
+- `toml`: a string used as the serialized key in TOML output (can be customized with `rename_key` in `toml_config(...)`)
+- `typecheck`: a callable used for custom validation during deserialization (can be customized with `typecheck_key` in `toml_config(...)`)
+
+### Type Validation
+
+The type validation is performed during dataclass instantiation. If a field has a `typecheck` validator,
+the validator is called with the field value and its annotation. If the validator raises a `ValueError`, the instantiation will fail with the same error. The type checking function has the following signature:
+
+```python
+from typing import Any, Annotated, Callable
+
+TypeChecker = Callable[[Any, Annotated], None]
+```
+
+### Example
+
+```python
+from dataclasses import dataclass, field
+from typing import Annotated, Any
+
+from serde_dataclass import TomlDataclass, toml_config
+
+def positive_int_checker(value: Any, annotation: Annotated) -> None:
+    if not isinstance(value, int) or value <= 0:
+        raise ValueError(f"Expected a positive integer, got {value!r}")
+
+@dataclass
+@toml_config(typecheck_key="typecheck")
+class Config(TomlDataclass):
+    value: int = field(default=1, metadata={"typecheck": positive_int_checker})
+
+cfg = Config(value=5)
+cfg.to_toml()  # This will succeed
+cfg.value = -1
+try:
+    cfg.to_toml()  # This will raise a ValueError due to failed type check
+except ValueError as e:
+    print(f"Type check failed as expected: {e}")
+```
+
+## Nesting and Composition
+
+The `TomlDataclass` and `JsonDataclass` base classes can be used in nested dataclass structures without any special configuration. Type checking and custom metadata will work as expected in nested contexts.
+Nesting is supported regardless of whether the nested dataclasses also inherit from `TomlDataclass` or `JsonDataclass`. This allows for flexible composition of dataclasses with different serialization needs.
+
+### Example
+
+<!--phmdoctest-skip-->
+
+```python
+from typing import List, Any, Annotated
+from dataclasses import dataclass, field
+from serde_dataclass import TomlDataclass, toml_config
+
+def positive_int_checker(value: Any, annotation: Annotated) -> None:
+    if not isinstance(value, int) or value <= 0:
+        raise ValueError(f"Expected a positive integer, got {value!r}")
+
+@dataclass
+class InnerConfig:
+    value: int = field(default=1, metadata={"description": "A positive integer", "typecheck": positive_int_checker})
+
+@dataclass
+@toml_config(typecheck_key="typecheck")
+class OuterConfig(TomlDataclass):
+    inner: List[InnerConfig] = field(default_factory=[InnerConfig(i) for i in range(10)], metadata={"description": "Nested configuration"})
+    value: int = field(default=10, metadata={"description": "Another positive integer"})
+
+cfg = OuterConfig()
+text = cfg.to_toml()  # This will succeed
+cfg.inner[0].value = -1
+try:
+    cfg.to_toml()  # This will raise a ValueError due to failed type check in the nested dataclass
+except ValueError as e:
+    print(f"Type check failed as expected: {e}")
 ```

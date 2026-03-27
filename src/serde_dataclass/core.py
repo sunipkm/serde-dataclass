@@ -244,22 +244,46 @@ def _normalize_for_dataclass(*, value: Any, cls: type[Any], rename_key: str) -> 
 
 
 def _typecheck_dataclass(vdict, typecheck_key: str):
-    cls = type(vdict)
-    hints = get_type_hints(type(vdict), include_extras=True)
+    if isinstance(vdict, dict):
+        for v in vdict.values():
+            _typecheck_dataclass(v, typecheck_key)
+        return
 
-    for f in fields(cls):
-        py_name = f.name
-        annotation = hints.get(py_name, f.type)
-        typecheck = f.metadata.get(typecheck_key, None)
+    if isinstance(vdict, list):
+        for v in vdict:
+            _typecheck_dataclass(v, typecheck_key)
+        return
 
-        if typecheck and annotation is not Any:
+    if isinstance(vdict, tuple):
+        for v in vdict:
+            _typecheck_dataclass(v, typecheck_key)
+        return
+
+    if isinstance(vdict, set):
+        for v in vdict:
+            _typecheck_dataclass(v, typecheck_key)
+        return
+
+    if is_dataclass(vdict):
+
+        cls = type(vdict)
+        hints = get_type_hints(type(vdict), include_extras=True)
+
+        for f in fields(cls):  # type: ignore
+            py_name = f.name
+            annotation = hints.get(py_name, f.type)
+            typecheck = f.metadata.get(typecheck_key, None)
             value = getattr(vdict, py_name)
-            try:
-                typecheck(value, annotation)
-            except Exception as e:
-                raise ValueError(
-                    f"Custom typecheck failed for field '{py_name}' with value {value!r}: {e}"
-                ) from e
+
+            if typecheck and annotation is not Any:
+                try:
+                    typecheck(value, annotation)
+                except Exception as e:
+                    raise ValueError(
+                        f"Custom typecheck failed for field '{py_name}' with value {value!r}: {e}"
+                    ) from e
+
+            _typecheck_dataclass(getattr(vdict, py_name), typecheck_key)
 
 
 def _normalize_for_type(*, value: Any, annotation: Any, rename_key: str) -> Any:

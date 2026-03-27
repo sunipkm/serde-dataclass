@@ -53,6 +53,8 @@ class JsonDataclass(_DataclassEnforcer):
                 "__json_encoder__ must be a subclass of json.JSONEncoder"
             )
 
+        _preserialize_check(type(self), self, kind="json")  # Ensure type checking is performed before serialization
+
         kwargs["cls"] = ser
         return dumps(dataclass_asdict(self), **kwargs)  # type: ignore
 
@@ -102,6 +104,7 @@ class TomlDataclass(_DataclassEnforcer):
             str: TOML string representation of this object.
         """
         cls = type(self)
+        _preserialize_check(cls, self, kind="toml")  # Ensure type checking is performed before serialization
         root_comment = getattr(cls, "__toml_root_comment__", None)
         if root_comment is None and cls.__doc__:
             root_comment = cls.__doc__.strip()
@@ -271,3 +274,7 @@ def _perform_type_check(cls, normalized, kind: Literal["json", "toml"]):
     typecheck = getattr(cls, f"__{kind}_typecheck_key__")
     _typecheck_dataclass(dcls, typecheck_key=typecheck)
     return dcls
+
+def _preserialize_check(cls, obj, kind: Literal["json", "toml"]):
+    typecheck = getattr(cls, f"__{kind}_typecheck_key__")
+    _typecheck_dataclass(obj, typecheck_key=typecheck)
