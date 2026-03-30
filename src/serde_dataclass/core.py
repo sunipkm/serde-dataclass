@@ -35,6 +35,11 @@ def _add_comment(container: Any, comment: Optional[str]) -> None:
         for line in str(comment).splitlines():
             container.add(tomlkit.comment(line))
 
+# def _check_default_docstring(cls: type[Any]) -> Optional[str]:
+#     doc = cls.__doc__
+#     if doc and doc.strip() and doc.strip().startswith(f'{cls.__name__}('):
+#         return None
+#     return doc
 
 def _write_dataclass_to_container(
     *,
@@ -45,8 +50,13 @@ def _write_dataclass_to_container(
     rename_key: str,
 ) -> None:
     type_hints = get_type_hints(cls, include_extras=True)
+    
+    ffields = fields(cls)
 
-    for f in fields(obj):
+    # if (comment := _check_default_docstring(cls)) and container and (len(ffields) > 0):
+    #     _add_comment(container, comment)
+
+    for f in ffields:
         py_name = f.name
         toml_name = f.metadata.get(rename_key, py_name)
         value = getattr(obj, py_name)

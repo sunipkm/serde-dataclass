@@ -35,6 +35,13 @@ def quantity_to_toml(obj, /, _parent=None, _sort_keys=False):
 class CustomHooks:
     @staticmethod
     def dacite_quantity_hook(s: str) -> Quantity:
+        s = s.strip() # Remove leading/trailing whitespace
+        if s.startswith("["):
+            # Handle array of quantities
+            arr_str = s.split("]")[0].strip("[")
+            arr = np.fromstring(arr_str, sep=" ", dtype=float)
+            unit_str = s.split("]")[1].strip()
+            return Quantity(arr, unit_str)
         return Quantity(s)
 
     @staticmethod
@@ -155,41 +162,50 @@ except ValueError as e:
 
 
 @dataclass
-class NotTomlSerializable:
-    """A not-serializable class
+class QuantityArr:
+    """A class with an array of quantities
     """
     value: Quantity['length'] = field(
-        default_factory=lambda: 5 * u.meter,
+        default_factory=lambda: np.arange(5) * u.meter,
         metadata={
-            "description": "A quantity with units",
+            "description": "A quantity array with units",
             "typecheck": check_quantity_length,
         }
     )
 
+    def __eq__(self, other):
+        if not isinstance(other, QuantityArr):
+            return NotImplemented
+        return np.array_equal(self.value.value, other.value.value) and self.value.unit == other.value.unit
+
 
 @dataclass
 @toml_config(de=CustomHooks().dacite_conf)
-class WithNonSerializable(TomlDataclass):
-    """A dataclass containing a non-serializable field
+class WithQtyArray(TomlDataclass):
+    """A dataclass containing an array of quantities
     """
-    not_serializable: NotTomlSerializable = field(
-        default_factory=NotTomlSerializable,
+    not_serializable: QuantityArr = field(
+        default_factory=QuantityArr,
         metadata={
-            "description": "A non-serializable field",
+            "description": "An array of quantities",
         }
     )
-    other_value: int = field(default=42, metadata={
-                             "description": "Another value"})
+    other_value: int = field(
+        default=42,
+        metadata={
+            "description": "Another value"
+        }
+    )
 
 
-cfg = WithNonSerializable()
+cfg = WithQtyArray()
 text = cfg.to_toml()
-loaded = WithNonSerializable.from_toml(text)
+loaded = WithQtyArray.from_toml(text)
 assert loaded == cfg
 
 modified = text.replace("5.0 m", "10.0 s")
 try:
-    loaded_err = WithNonSerializable.from_toml(
+    loaded_err = WithQtyArray.from_toml(
         modified)  # Should fail since it's not a length
     print(loaded_err)
 except ValueError as e:
@@ -232,6 +248,7 @@ except ValueError as e:
 
 @dataclass
 class Inner:
+    """A nested dataclass with a type-checked field."""
     value: int = field(
         default=1,
         metadata={
@@ -243,6 +260,7 @@ class Inner:
 
 @dataclass
 class Outer(TomlDataclass):
+    """An outer dataclass containing a nested dataclass with type checking."""
     inner: Inner = field(
         default_factory=Inner,
         metadata={
@@ -267,6 +285,7 @@ cfg = Outer()
 text = cfg.to_toml()
 assert 'value = 1 # A positive integer' in text
 loaded = Outer.from_toml(text)
+assert loaded == cfg
 assert loaded.inner.value == 1
 cfg.innerlist[-1].value = -1
 try:
