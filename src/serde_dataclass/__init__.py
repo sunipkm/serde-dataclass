@@ -61,7 +61,7 @@ from importlib.metadata import version
 from .iface import JsonDataclass, TomlDataclass, json_config, toml_config
 from .core import TypeChecker
 
-__version__ = version(__package__ or "toml_dataclass")
+__version__ = version(__package__ or "serde_dataclass")
 
 __all__ = [
     "JsonDataclass", "TomlDataclass",
