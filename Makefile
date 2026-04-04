@@ -15,7 +15,7 @@ tests/test_readme.py: README.md
 	@echo "Generating test file for README.md"
 	@phmdoctest README.md --outfile tests/test_readme.py
 
-test: $(TESTFILES) tests/test_readme.py
+test: $(TESTFILES) tests/test_readme.py tests/test_lib.py
 	@echo "Running tests"
 	@pytest -q
 

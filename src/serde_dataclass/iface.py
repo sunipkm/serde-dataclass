@@ -28,7 +28,10 @@ class JsonDataclass(_DataclassEnforcer):
     """
 
     __json_encoder__: Optional[type[JSONEncoder]] = None
-    __json_dacite_config__: Optional[Config] = None
+    __json_dacite_config__: Config = Config(
+        cast=[tuple],
+        check_types=True,
+    )
     __json_typecheck_key__: str = "typecheck"
 
     def to_json(self, **kwargs) -> str:

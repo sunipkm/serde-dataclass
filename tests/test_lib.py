@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dacite import Config
-from tomlkit.exceptions import ConvertError
+from dacite.exceptions import MissingValueError, UnexpectedDataError, WrongTypeError
+from tomlkit.exceptions import ConvertError, ParseError
 from tomlkit import register_encoder, item
 import astropy.units as astrounits
 from astropy.units import Quantity
@@ -8,8 +9,8 @@ import numpy as np
 
 from dataclasses import dataclass, field
 from enum import Enum
-from json import JSONEncoder
-from typing import Any, Dict, List, Literal, Optional
+from json import JSONDecodeError, JSONEncoder
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import pytest
 
@@ -312,6 +313,126 @@ def test_ndarray():
     json_loaded = NumpyConfig.from_json(json_text)
     assert np.array_equal(json_loaded.array, loaded.array)
     assert json_loaded.length == loaded.length
+
+
+def test_json_tuple_field_is_cast_back_to_tuple():
+    @dataclass
+    class JsonTupleConfig(JsonDataclass):
+        thresholds: Tuple[int, int, int]
+
+    cfg = JsonTupleConfig(thresholds=(4, 5, 6))
+    loaded = JsonTupleConfig.from_json(cfg.to_json())
+
+    assert loaded.thresholds == (4, 5, 6)
+    assert isinstance(loaded.thresholds, tuple)
+
+
+def test_json_config_rejects_non_encoder_type():
+    with pytest.raises(TypeError, match="must be a subclass"):
+
+        @json_config(ser=int) # type: ignore
+        @dataclass
+        class BadEncoderConfig(JsonDataclass):
+            value: int
+
+
+def test_to_json_rejects_duplicate_encoder_specification():
+    class LocalEncoder(JSONEncoder):
+        pass
+
+    @json_config(ser=LocalEncoder)
+    @dataclass
+    class Encoded(JsonDataclass):
+        value: int
+
+    with pytest.raises(ValueError, match="Cannot specify both"):
+        Encoded(value=1).to_json(cls=JSONEncoder)
+
+
+def test_from_json_requires_dataclass_decorator():
+    class NotDecorated(JsonDataclass):
+        value: int
+
+    with pytest.raises(TypeError, match="must be decorated with @dataclass"):
+        NotDecorated.from_json('{"value": 1}')
+
+
+def test_from_toml_requires_dataclass_decorator():
+    class NotDecorated(TomlDataclass):
+        value: int
+
+    with pytest.raises(TypeError, match="must be decorated with @dataclass"):
+        NotDecorated.from_toml("value = 1")
+
+
+def test_json_custom_de_can_preserve_tuple_casting():
+    custom_de = Config(cast=[tuple], check_types=True)
+
+    @json_config(de=custom_de)
+    @dataclass
+    class JsonTupleConfigWithCustomDe(JsonDataclass):
+        thresholds: Tuple[int, int, int]
+
+    loaded = JsonTupleConfigWithCustomDe.from_json('{"thresholds": [7, 8, 9]}')
+    assert loaded.thresholds == (7, 8, 9)
+    assert isinstance(loaded.thresholds, tuple)
+
+
+def test_from_json_invalid_json_raises_decode_error():
+    @dataclass
+    class JsonConfig(JsonDataclass):
+        value: int
+
+    with pytest.raises(JSONDecodeError):
+        JsonConfig.from_json('{"value": 1')
+
+
+def test_from_toml_invalid_toml_raises_parse_error():
+    @dataclass
+    class TomlConfig(TomlDataclass):
+        value: int
+
+    with pytest.raises(ParseError):
+        TomlConfig.from_toml('value = "unterminated')
+
+
+def test_from_json_missing_required_field_raises_error():
+    @dataclass
+    class JsonConfig(JsonDataclass):
+        value: int
+        name: str
+
+    with pytest.raises(MissingValueError):
+        JsonConfig.from_json('{"value": 1}')
+
+
+def test_from_json_wrong_type_raises_error():
+    @dataclass
+    class JsonConfig(JsonDataclass):
+        value: int
+
+    with pytest.raises(WrongTypeError):
+        JsonConfig.from_json('{"value": "oops"}')
+
+
+def test_json_strict_config_rejects_unexpected_fields():
+    @json_config(de=Config(strict=True, cast=[tuple], check_types=True))
+    @dataclass
+    class StrictJsonConfig(JsonDataclass):
+        value: int
+
+    with pytest.raises(UnexpectedDataError):
+        StrictJsonConfig.from_json('{"value": 1, "extra": 2}')
+
+
+def test_load_toml_missing_file_raises_file_not_found(tmp_path):
+    @dataclass
+    class TomlConfig(TomlDataclass):
+        value: int
+
+    missing = tmp_path / "missing.toml"
+    with pytest.raises(FileNotFoundError):
+        TomlConfig.load_toml(missing)
 
 
 def test_tomldataclass():

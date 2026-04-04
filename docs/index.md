@@ -1,4 +1,4 @@
-# serde-dataclass
+# 🐼 serde-dataclass 🐻
 
 Serialize Python dataclasses to TOML and JSON with a small, explicit API.
 
