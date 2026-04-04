@@ -378,6 +378,48 @@ def test_json_custom_de_can_preserve_tuple_casting():
     assert isinstance(loaded.thresholds, tuple)
 
 
+def test_json_custom_de_without_tuple_cast_still_casts_tuple():
+    @json_config(de=Config(check_types=True))
+    @dataclass
+    class JsonTupleConfigWithoutTupleCast(JsonDataclass):
+        thresholds: Tuple[int, int, int]
+
+    loaded = JsonTupleConfigWithoutTupleCast.from_json('{"thresholds": [1, 2, 3]}')
+    assert loaded.thresholds == (1, 2, 3)
+    assert isinstance(loaded.thresholds, tuple)
+
+
+def test_toml_custom_de_without_tuple_cast_still_casts_tuple():
+    @toml_config(de=Config(check_types=True))
+    @dataclass
+    class TomlTupleConfigWithoutTupleCast(TomlDataclass):
+        thresholds: Tuple[int, int, int]
+
+    loaded = TomlTupleConfigWithoutTupleCast.from_toml("thresholds = [1, 2, 3]")
+    assert loaded.thresholds == (1, 2, 3)
+    assert isinstance(loaded.thresholds, tuple)
+
+
+def test_json_custom_de_forces_check_types_true():
+    @json_config(de=Config(check_types=False))
+    @dataclass
+    class JsonConfigWithCustomDe(JsonDataclass):
+        value: int
+
+    with pytest.raises(WrongTypeError):
+        JsonConfigWithCustomDe.from_json('{"value": "oops"}')
+
+
+def test_toml_custom_de_forces_check_types_true():
+    @toml_config(de=Config(check_types=False))
+    @dataclass
+    class TomlConfigWithCustomDe(TomlDataclass):
+        value: int
+
+    with pytest.raises(WrongTypeError):
+        TomlConfigWithCustomDe.from_toml('value = "oops"')
+
+
 def test_from_json_invalid_json_raises_decode_error():
     @dataclass
     class JsonConfig(JsonDataclass):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import is_dataclass, asdict as dataclass_asdict
+from dataclasses import is_dataclass, asdict as dataclass_asdict, replace
 from json import JSONEncoder, loads, dumps
 from pathlib import Path
 from typing import Literal, Optional, TypeVar, Union
@@ -181,6 +181,13 @@ class TomlDataclass(_DataclassEnforcer):
         return cls.from_toml(Path(path).read_text(encoding="utf-8"))
 
 
+def _ensure_tuple_cast(config: Config) -> Config:
+    cast_items = list(config.cast or [])
+    if tuple not in cast_items:
+        cast_items.append(tuple)
+    return replace(config, cast=cast_items, check_types=True)
+
+
 def json_config(
     cls=None,
     /,
@@ -205,7 +212,7 @@ def json_config(
             setattr(cls, "__json_encoder__", ser)
 
         if de is not None:
-            setattr(cls, "__json_dacite_config__", de)
+            setattr(cls, "__json_dacite_config__", _ensure_tuple_cast(de))
 
         return cls
 
@@ -258,7 +265,7 @@ def toml_config(
             setattr(cls, "__toml_typecheck_key__", typecheck_key)
 
         if de is not None:
-            setattr(cls, "__toml_dacite_config__", de)
+            setattr(cls, "__toml_dacite_config__", _ensure_tuple_cast(de))
 
         return cls
 
